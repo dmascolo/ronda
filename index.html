@@ -55,6 +55,11 @@ button,input{font:inherit;color:inherit}
 .field select{background:var(--abyss);border:1px solid var(--line);border-radius:8px;padding:8px;color:var(--text);font:inherit;font-size:16px}
 .panel-row{display:flex;gap:8px}
 .hint{margin:0;font-size:.78rem;color:var(--muted)}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{background:none;border:0;padding:7px 4px;cursor:pointer;color:var(--muted);font-size:.85rem}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-checked="true"]{background:var(--holo);color:var(--abyss);font-weight:500}
+.badge{font-family:var(--display);font-size:.68rem;letter-spacing:.12em;border:1px solid var(--ember);color:var(--ember);border-radius:5px;padding:1px 6px;margin-left:10px;vertical-align:3px}
 
 .main{min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr);gap:10px}
 .stage{display:grid;justify-items:center;gap:6px;padding-top:4px}
@@ -124,13 +129,22 @@ body[data-state="listening"] .mic{background:var(--holo);color:var(--abyss)}
 
 <div class="app">
   <header class="bar">
-    <span class="mark">RONDA</span>
+    <span><span class="mark">RONDA</span><span class="badge" id="modeBadge" hidden>AI</span></span>
     <div class="bar-right">
       <span class="link" id="link"><span class="dot"></span><span id="linkText">Non collegato</span></span>
       <button class="pill" id="reloadBtn">Aggiorna</button>
-      <button class="pill" id="voiceBtn" aria-expanded="false">Voce</button>
+      <button class="pill" id="voiceBtn" aria-expanded="false">Opzioni</button>
     </div>
     <div class="panel" id="voicePanel" hidden>
+      <div class="field" id="modeField" hidden>
+        <span>Modalità</span>
+        <div class="seg" id="modeSeg" role="radiogroup" aria-label="Modalità">
+          <button data-mode="base" role="radio">Base</button>
+          <button data-mode="auto" role="radio">Automatica</button>
+          <button data-mode="ai" role="radio">AI</button>
+        </div>
+        <p class="hint" id="modeHint"></p>
+      </div>
       <label class="field"><span>Voce di RONDA</span><select id="voiceSel"></select></label>
       <div class="panel-row">
         <button class="pill" id="voiceToggle" aria-pressed="true">Voce attiva</button>
@@ -216,6 +230,8 @@ let lastF = null, lastList = [];
 let state = 'idle', busy = false;
 let micBlocked = !SR;
 let voiceOn = store.get('ronda_voice') !== 'off' && !!tts;
+let aiAvailable = false;
+let mode = store.get('ronda_mode') || 'auto';
 
 /* ======================= Date e testo ======================= */
 const GIORNI = ['domenica','lunedi','martedi','mercoledi','giovedi','venerdi','sabato'];
@@ -599,8 +615,6 @@ function speak(text, force) {
 const saluto = () => { const h = new Date().getHours(); return h < 13 ? 'Buongiorno' : h < 18 ? 'Buon pomeriggio' : 'Buonasera'; };
 
 function renderVoiceBtn() {
-  $('voiceBtn').hidden = !tts;
-  $('voiceBtn').textContent = voiceOn ? 'Voce' : 'Voce spenta';
   $('voiceToggle').setAttribute('aria-pressed', voiceOn);
   $('voiceToggle').textContent = voiceOn ? 'Voce attiva' : 'Voce spenta';
 }
@@ -624,6 +638,28 @@ $('voiceToggle').onclick = () => {
   if (!voiceOn && tts) { tts.cancel(); if (state === 'speaking') setState('idle'); }
   renderVoiceBtn();
 };
+
+/* ======================= Modalità ======================= */
+const MODE_HINTS = {
+  base: 'Gratuita e istantanea: capisce le domande più comuni.',
+  auto: "Usa l'AI solo quando la modalità base non capisce la domanda o non trova nulla.",
+  ai: "Ogni domanda passa dall'AI: capisce frasi libere, abbreviazioni e nomi storpiati."
+};
+function renderMode() {
+  const eff = aiAvailable ? mode : 'base';
+  $('modeField').hidden = !aiAvailable;
+  $('modeSeg').querySelectorAll('button').forEach(b => b.setAttribute('aria-checked', b.dataset.mode === eff));
+  $('modeHint').textContent = MODE_HINTS[eff];
+  $('modeBadge').hidden = eff === 'base';
+  $('modeBadge').textContent = eff === 'ai' ? 'AI' : 'AUTO';
+}
+$('modeSeg').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  mode = b.dataset.mode;
+  store.set('ronda_mode', mode);
+  renderMode();
+});
 
 /* ======================= Voce in ingresso ======================= */
 let rec = null;
@@ -672,7 +708,69 @@ $('mic').onclick = $('core').onclick;
 if (!SR) $('mic').hidden = true;
 
 /* ======================= Domande ======================= */
-function send(text) {
+function localAnswer(f, text) {
+  if (!f.any && lastList.length && (f.focus || /\bchi\b/.test(norm(text)))) {
+    const ff = Object.assign({}, lastF, { focus: f.focus });
+    return { text: lastList.slice(0, 3).map(m => sentence(m, ff)).join(' '), list: lastList };
+  }
+  if (!f.any) return { text: helpText(), list: [], unknown: true };
+  const out = answer(f);
+  lastF = f;
+  lastList = out.list;
+  return out;
+}
+
+function slimF(f) {
+  return f ? { cats: f.cats, opps: f.opps, home: f.home, notif: f.notif, mode: f.mode, count: f.count,
+    from: f.win ? f.win.from : null, to: f.win ? f.win.to : null, label: f.win ? f.win.label : '' } : null;
+}
+
+function toFilter(r) {
+  const oppNames = opps.map(o => o.o);
+  const arr = v => Array.isArray(v) ? v : [];
+  const f = {
+    cats: arr(r.cats).filter(c => cats.includes(c)),
+    opps: arr(r.opps).filter(o => oppNames.includes(o)),
+    home: typeof r.home === 'boolean' ? r.home : null,
+    notif: typeof r.notif === 'boolean' ? r.notif : null,
+    win: null,
+    mode: r.mode === 'next' || r.mode === 'last' ? r.mode : null,
+    count: !!r.count,
+    focus: r.focus === 'dove' || r.focus === 'ora' ? r.focus : null,
+    any: true
+  };
+  const isoRe = /^\d{4}-\d{2}-\d{2}$/;
+  if (isoRe.test(r.from || '')) {
+    let to = isoRe.test(r.to || '') ? r.to : r.from;
+    if (to < r.from) to = r.from;
+    f.win = { from: r.from, to: to, label: r.from === to ? dayText(r.from) : (r.label || 'nel periodo richiesto') };
+  }
+  return f;
+}
+
+async function aiAnswer(text) {
+  setState('thinking', 'Interpreto la domanda…');
+  try {
+    const t = today0();
+    const res = await call('parse', { code: code, question: text, ctx: {
+      cats: cats, opps: opps.map(o => o.o),
+      today: iso(t) + ' (' + GIORNI_TXT[t.getDay()] + ')', last: slimF(lastF)
+    } });
+    if (!res || !res.ok) throw new Error((res && res.error) || 'Nessuna risposta.');
+    const r = res.filter || {};
+    if (!r.understood) return { text: r.reply || helpText(), list: [] };
+    const f = toFilter(r);
+    const out = answer(f);
+    lastF = f;
+    lastList = out.list;
+    return out;
+  } catch (err) {
+    addMsg('error', 'AI non disponibile (' + ((err && err.message) || err) + '). Rispondo con la modalità base.');
+    return null;
+  }
+}
+
+async function send(text) {
   text = String(text || '').trim();
   if (!text || busy) return;
   $('q').value = '';
@@ -684,21 +782,26 @@ function send(text) {
     return;
   }
 
-  let f = parse(text);
-  let out;
-  if (!f.any && lastList.length && (f.focus || /\bchi\b/.test(norm(text)))) {
-    const ff = Object.assign({}, lastF, { focus: f.focus });
-    out = { text: lastList.slice(0, 3).map(m => sentence(m, ff)).join(' '), list: lastList };
-  } else if (!f.any) {
-    out = { text: helpText(), list: [] };
-  } else {
-    out = answer(f);
-    lastF = f;
-    lastList = out.list;
+  busy = true;
+  try {
+    const eff = aiAvailable ? mode : 'base';
+    const f = parse(text);
+    let out;
+    if (eff === 'ai') {
+      out = await aiAnswer(text) || localAnswer(parse(text), text);
+    } else {
+      out = localAnswer(f, text);
+      if (eff === 'auto' && (out.unknown || (f.any && !out.list.length))) {
+        const alt = await aiAnswer(text);
+        if (alt && (out.unknown || alt.list.length)) out = alt;
+      }
+    }
+    const talking = speak(out.text);
+    addAnswer(out.text, out.list);
+    if (!talking) setState('idle');
+  } finally {
+    busy = false;
   }
-  const talking = speak(out.text);
-  addAnswer(out.text, out.list);
-  if (!talking) setState('idle');
 }
 
 $('send').onclick = () => send($('q').value);
@@ -746,6 +849,8 @@ async function connect(c, refresh, greet) {
     store.set('ronda_code', c);
     $('gate').hidden = true;
     matches = res.matches || [];
+    aiAvailable = !!res.ai;
+    renderMode();
     buildIndex();
     renderChips();
     renderDiag(res.diag || []);
@@ -771,6 +876,7 @@ $('codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') connect($(
 $('reloadBtn').onclick = () => { if (code) connect(code, true); };
 
 renderVoiceBtn();
+renderMode();
 renderChips();
 setState('idle');
 code ? connect(code, true, true) : showGate();
