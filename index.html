@@ -225,7 +225,7 @@ const store = {
 };
 
 let code = store.get('ronda_code') || '';
-let matches = [], cats = [], catKeys = [], opps = [];
+let matches = [], cats = [], catKeys = [], catToks = {}, opps = [];
 let lastF = null, lastList = [];
 let state = 'idle', busy = false;
 let micBlocked = !SR;
@@ -268,10 +268,17 @@ const STOP = new Set(['calcio','asd','ssd','usd','polisportiva','sportiva','spor
   'juniores','squadra','partita','partite','casa','trasferta','prossima','prossimo','contro','quando','giochiamo']
   .concat(GIORNI, MESI));
 
+const CAT_STOP = new Set(['categoria','categorie','squadra','prima','seconda','terza','gruppo','team','under','anni','annata','classe','leva','nati']);
+
 function buildIndex() {
   matches.forEach(m => { m.catKey = m.cat; });
   cats = [...new Set(matches.map(m => m.cat).filter(Boolean))];
   catKeys = cats.map(c => ({ c: c, k: compact(c) })).filter(x => x.k.length >= 2).sort((a, b) => b.k.length - a.k.length);
+  // Parole che identificano una categoria anche da sole: "2010", "allievi", "u16"…
+  catToks = {};
+  cats.forEach(c => norm(c).split(' ').forEach(t => {
+    if (t.length >= 3 && !CAT_STOP.has(t)) (catToks[t] = catToks[t] || []).includes(c) || catToks[t].push(c);
+  }));
   opps = [...new Set(matches.map(m => m.opp).filter(Boolean))].map(o => ({
     o: o, full: norm(o),
     toks: norm(o).split(' ').filter(t => t.length >= 4 && !STOP.has(t) && !/^\d+$/.test(t))
@@ -344,6 +351,14 @@ function parse(q) {
 
   const qc = compact(q);
   catKeys.forEach(x => { if (qc.includes(x.k) && !f.cats.some(c => compact(c).includes(x.k))) f.cats.push(x.c); });
+  if (!f.cats.length) words.forEach(w => (catToks[w] || []).forEach(c => { if (!f.cats.includes(c)) f.cats.push(c); }));
+
+  // La domanda cita una categoria (anno di nascita, sigla U…) che non esiste nel foglio?
+  const mu = n.match(/\b(u\d{1,2})\b/);
+  const my = n.match(/\b(19\d\d|20\d\d)\b/);
+  const mc = n.match(/\bcategori[ae] (?:del |della |dei |degli |delle )?([a-z]*\d[a-z0-9]*)/);
+  const hint = mc ? mc[1] : mu ? mu[1].toUpperCase() : (my && Number(my[1]) <= new Date().getFullYear() - 4) ? my[1] : null;
+  if (!f.cats.length && hint) f.catMiss = hint;
 
   let best = 0;
   opps.forEach(o => {
@@ -380,6 +395,7 @@ function parse(q) {
     if (f.mode) merged.mode = f.mode;
     merged.count = f.count || merged.count;
     merged.focus = f.focus;
+    merged.catMiss = f.catMiss;
     merged.any = true;
     return merged;
   }
@@ -448,7 +464,7 @@ function answer(f) {
   }
   const n = list.length;
   const det = list.slice(0, 3).map(m => sentence(m, f)).join(' ');
-  const rest = n > 3 ? ' Le altre ' + (n - 3) + ' sono nell\'elenco qui sotto.' : '';
+  const rest = n === 4 ? ' L\'altra è nell\'elenco qui sotto.' : n > 4 ? ' Le altre ' + (n - 3) + ' sono nell\'elenco qui sotto.' : '';
 
   if (f.count) {
     return { text: (n === 1 ? 'C\'è una partita' : 'Ci sono ' + n + ' partite') + (d ? ' ' + d : '') + '.' + (n <= 3 ? ' ' + det : ''), list };
@@ -714,6 +730,9 @@ function localAnswer(f, text) {
     return { text: lastList.slice(0, 3).map(m => sentence(m, ff)).join(' '), list: lastList };
   }
   if (!f.any) return { text: helpText(), list: [], unknown: true };
+  if (f.catMiss) {
+    return { text: 'Non trovo la categoria ' + f.catMiss + ' nel foglio. Le categorie disponibili sono: ' + joinIt(cats) + '.', list: [], unknown: true };
+  }
   const out = answer(f);
   lastF = f;
   lastList = out.list;
@@ -725,12 +744,31 @@ function slimF(f) {
     from: f.win ? f.win.from : null, to: f.win ? f.win.to : null, label: f.win ? f.win.label : '' } : null;
 }
 
-function toFilter(r) {
+// Riporta un nome restituito dall'AI ai valori reali del foglio (maiuscole, spazi, solo l'anno, nome parziale…)
+function resolveNames(values, list) {
+  const out = [];
+  const add = v => { if (!out.includes(v)) out.push(v); };
+  values.forEach(v => {
+    const k = compact(v);
+    if (!k) return;
+    const exact = list.filter(x => x === v || compact(x) === k);
+    if (exact.length) return exact.forEach(add);
+    const part = list.filter(x => compact(x).includes(k) || k.includes(compact(x)));
+    if (part.length) return part.forEach(add);
+    const toks = norm(v).split(' ').filter(t => t.length >= 3 && !CAT_STOP.has(t) && !STOP.has(t));
+    list.filter(x => { const w = norm(x).split(' '); return toks.some(t => w.includes(t)); }).forEach(add);
+  });
+  return out;
+}
+
+function toFilter(r, localF) {
   const oppNames = opps.map(o => o.o);
-  const arr = v => Array.isArray(v) ? v : [];
+  const arr = v => (Array.isArray(v) ? v : []).map(String);
+  const aiCats = resolveNames(arr(r.cats), cats);
+  const aiOpps = resolveNames(arr(r.opps), oppNames);
   const f = {
-    cats: arr(r.cats).filter(c => cats.includes(c)),
-    opps: arr(r.opps).filter(o => oppNames.includes(o)),
+    cats: aiCats.length ? aiCats : (localF ? localF.cats : []),
+    opps: aiOpps.length ? aiOpps : (localF ? localF.opps : []),
     home: typeof r.home === 'boolean' ? r.home : null,
     notif: typeof r.notif === 'boolean' ? r.notif : null,
     win: null,
@@ -739,6 +777,8 @@ function toFilter(r) {
     focus: r.focus === 'dove' || r.focus === 'ora' ? r.focus : null,
     any: true
   };
+  // Categoria citata ma non trovata: meglio dirlo che mostrare tutte le partite
+  if (!f.cats.length && (arr(r.cats).length || (localF && localF.catMiss))) f.catMiss = (localF && localF.catMiss) || arr(r.cats)[0];
   const isoRe = /^\d{4}-\d{2}-\d{2}$/;
   if (isoRe.test(r.from || '')) {
     let to = isoRe.test(r.to || '') ? r.to : r.from;
@@ -748,7 +788,7 @@ function toFilter(r) {
   return f;
 }
 
-async function aiAnswer(text) {
+async function aiAnswer(text, localF) {
   setState('thinking', 'Interpreto la domanda…');
   try {
     const t = today0();
@@ -759,7 +799,10 @@ async function aiAnswer(text) {
     if (!res || !res.ok) throw new Error((res && res.error) || 'Nessuna risposta.');
     const r = res.filter || {};
     if (!r.understood) return { text: r.reply || helpText(), list: [] };
-    const f = toFilter(r);
+    const f = toFilter(r, localF);
+    if (f.catMiss) {
+      return { text: 'Non trovo la categoria ' + f.catMiss + ' nel foglio. Le categorie disponibili sono: ' + joinIt(cats) + '.', list: [] };
+    }
     const out = answer(f);
     lastF = f;
     lastList = out.list;
@@ -788,11 +831,11 @@ async function send(text) {
     const f = parse(text);
     let out;
     if (eff === 'ai') {
-      out = await aiAnswer(text) || localAnswer(parse(text), text);
+      out = await aiAnswer(text, f) || localAnswer(parse(text), text);
     } else {
       out = localAnswer(f, text);
       if (eff === 'auto' && (out.unknown || (f.any && !out.list.length))) {
-        const alt = await aiAnswer(text);
+        const alt = await aiAnswer(text, f);
         if (alt && (out.unknown || alt.list.length)) out = alt;
       }
     }
