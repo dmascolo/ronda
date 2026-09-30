@@ -209,9 +209,10 @@ body[data-state="listening"] .mic{background:var(--holo);color:var(--abyss)}
   </div>
 </section>
 
+<!-- Su GitHub Pages l'URL dello script sta in config.js: così index.html si può sostituire senza modificarlo -->
+<script src="config.js"></script>
 <script>
-// Se ospiti questa pagina fuori da Apps Script (es. GitHub Pages), incolla qui l'URL /exec della Web App
-const ENDPOINT = 'https://docs.google.com/spreadsheets/d/1u9y3ga1xJVN-eUS4JRyDMd9VO23QRzHbMG5s8hxWLPA/edit';
+const ENDPOINT = (window.RONDA_ENDPOINT || '').trim();
 
 const $ = id => document.getElementById(id);
 const hasGAS = typeof google !== 'undefined' && google.script && google.script.run;
@@ -493,8 +494,22 @@ function call(action, payload) {
   payload = Object.assign({ action: action }, payload);
   if (hasGAS) return new Promise((res, rej) =>
     google.script.run.withSuccessHandler(res).withFailureHandler(rej).api(action, payload));
-  if (!ENDPOINT) return Promise.reject(new Error("Imposta ENDPOINT con l'URL della Web App."));
-  return fetch(ENDPOINT, { method: 'POST', body: JSON.stringify(payload) }).then(r => r.json());
+  if (!ENDPOINT) return Promise.reject(new Error("Manca l'URL dello script: controlla il file config.js."));
+  if (!/\/exec\/?$/.test(ENDPOINT)) return Promise.reject(new Error("L'URL in config.js deve finire con /exec (non /dev o /edit)."));
+  return fetch(ENDPOINT, { method: 'POST', body: JSON.stringify(payload) })
+    .then(r => r.text())
+    .then(t => { try { return JSON.parse(t); } catch (e) { throw new Error(googleError(t)); } });
+}
+
+// Google ha risposto con una pagina web invece dei dati: provo a spiegare perché
+function googleError(html) {
+  let txt = '';
+  try { txt = (new DOMParser().parseFromString(html, 'text/html').body.textContent || '').replace(/\s+/g, ' ').trim(); } catch (e) {}
+  if (/doPost/i.test(txt)) return 'Il deployment usa una versione vecchia dello script. In Apps Script: Gestisci deployment → Modifica → Versione: Nuova versione.';
+  if (/autorizz|authoriz|permission|autorizzazion/i.test(txt)) return "Lo script va autorizzato: nell'editor esegui la funzione autorizza e accetta i permessi.";
+  if (/accedi|sign in|login|account google/i.test(txt)) return 'Lo script chiede di accedere a Google: nel deployment imposta "Chi ha accesso: Chiunque".';
+  if (/non trovat|not found|404/i.test(txt)) return "L'URL in config.js non corrisponde a nessun deployment attivo: ricopialo da Gestisci deployment.";
+  return 'Google ha risposto con una pagina invece dei dati' + (txt ? ': ' + txt.slice(0, 180) : '.');
 }
 
 /* ======================= Stato visivo ======================= */
