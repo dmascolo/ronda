@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#06121F">
+<title>RONDA · Gestionale Incontri</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --abyss:#06121F; --hull:#0B2033; --holo:#6FE3FF; --ember:#FFB547; --signal:#FF6B7D;
+  --text:#D8F6FF; --muted:#86AEC4; --line:rgba(111,227,255,.24); --grid:rgba(111,227,255,.045);
+  --state:var(--holo);
+  --display:"Chakra Petch","Segoe UI",system-ui,sans-serif;
+  --body:Barlow,"Segoe UI",system-ui,sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*,*::before,*::after{box-sizing:inherit}
+html,body{height:100%;margin:0}
+body{
+  background-color:var(--abyss);color:var(--text);font:16px/1.5 var(--body);
+  background-image:
+    radial-gradient(ellipse 70% 50% at 50% 32%,rgba(43,168,214,.18),transparent 70%),
+    linear-gradient(var(--grid) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:100% 100%,28px 28px,28px 28px;
+  -webkit-tap-highlight-color:transparent;
+}
+body[data-state="thinking"]{--state:var(--ember)}
+body[data-state="error"]{--state:var(--signal)}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--holo);outline-offset:3px}
+[hidden]{display:none!important}
+
+.app{height:100%;max-width:1120px;margin:0 auto;padding:10px 16px 12px;display:grid;grid-template-rows:auto 1fr auto;gap:8px}
+
+.bar{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding-bottom:8px}
+.mark{font-family:var(--display);font-weight:600;font-size:1.15rem;letter-spacing:.32em;color:var(--holo)}
+.bar-right{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--muted)}
+.link{display:flex;align-items:center;gap:7px;margin-right:4px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.link.on .dot{background:var(--holo);box-shadow:0 0 8px var(--holo)}
+.pill{background:none;border:1px solid var(--line);border-radius:999px;padding:3px 11px;cursor:pointer;font-size:.8rem;color:var(--muted)}
+.pill[aria-pressed="true"]{color:var(--holo);border-color:var(--holo)}
+
+.main{min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr);gap:10px}
+.stage{display:grid;justify-items:center;gap:6px;padding-top:4px}
+.core{width:min(58vw,300px,34vh);aspect-ratio:1;border:0;background:none;padding:0;cursor:pointer;color:var(--state);transition:color .4s ease;border-radius:50%}
+.core svg{width:100%;height:100%;display:block;overflow:visible;filter:drop-shadow(0 0 10px color-mix(in srgb,var(--state) 45%,transparent))}
+.spin{transform-box:view-box;transform-origin:100px 100px;animation:spin var(--dur) linear infinite}
+.r1{--dur:60s}.r2{--dur:28s;animation-direction:reverse}.r3{--dur:14s}.sweep{--dur:3.2s;opacity:0;transition:opacity .4s}
+body[data-state="listening"] .sweep,body[data-state="thinking"] .sweep{opacity:1}
+body[data-state="thinking"] .r1{--dur:8s}body[data-state="thinking"] .r2{--dur:4s}body[data-state="thinking"] .r3{--dur:2s}
+.pulse{transform-box:view-box;transform-origin:100px 100px}
+body[data-state="listening"] .pulse,body[data-state="speaking"] .pulse{animation:pulse 1.1s ease-in-out infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{50%{transform:scale(1.12);opacity:.55}}
+.state{font-family:var(--display);font-size:.95rem;color:var(--state);min-height:1.5em;text-align:center;transition:color .4s}
+
+.log{min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding:4px 2px 8px;
+  mask-image:linear-gradient(transparent,#000 18px);-webkit-mask-image:linear-gradient(transparent,#000 18px)}
+.empty{margin:auto 0;color:var(--muted);text-align:center;max-width:40ch;align-self:center}
+.empty p{margin:0 0 10px}
+.empty details{font-size:.85rem;text-align:left}
+.empty summary{cursor:pointer;text-align:center}
+.diag{margin-top:8px;display:grid;gap:6px}
+.msg{max-width:62ch;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.user{align-self:flex-end;font-family:var(--display);color:var(--muted);font-size:.92rem;text-align:right}
+.msg.ronda{align-self:stretch;border-left:2px solid var(--holo);padding:2px 0 2px 12px;font-size:1.05rem}
+.msg.error{align-self:flex-start;border-left:2px solid var(--signal);padding:2px 0 2px 12px;color:var(--signal)}
+
+.rows{margin-top:10px;display:grid;white-space:normal}
+.row{display:grid;grid-template-columns:7.2em 1fr;gap:0 12px;padding:7px 0;border-top:1px solid var(--line);font-size:.92rem}
+.when{font-family:var(--display);color:var(--holo);font-size:.85rem;line-height:1.4}
+.where{grid-column:2;color:var(--muted);font-size:.85rem}
+.tag{display:inline-block;font-size:.75rem;border:1px solid var(--line);border-radius:6px;padding:0 6px;margin-left:6px;color:var(--muted);vertical-align:1px}
+.tag.warn{border-color:var(--ember);color:var(--ember)}
+
+.dock{display:grid;gap:8px}
+.chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;background:rgba(111,227,255,.06);border:1px solid var(--line);border-radius:999px;padding:6px 13px;font-size:.88rem;cursor:pointer}
+.chip:hover{border-color:var(--holo)}
+.input{display:flex;align-items:center;gap:8px;background:var(--hull);border:1px solid var(--line);border-radius:14px;padding:6px}
+.input:focus-within{border-color:var(--holo)}
+.input input{flex:1;min-width:0;background:none;border:0;outline:0;padding:8px 6px;font-size:16px}
+.input input::placeholder{color:var(--muted)}
+.mic{width:40px;height:40px;flex:none;border-radius:50%;border:1px solid var(--line);background:none;cursor:pointer;display:grid;place-items:center;color:var(--holo)}
+body[data-state="listening"] .mic{background:var(--holo);color:var(--abyss)}
+.send{flex:none;border:0;border-radius:10px;background:var(--holo);color:var(--abyss);font-family:var(--display);font-weight:600;padding:9px 16px;cursor:pointer}
+.send:disabled{opacity:.4;cursor:default}
+
+.gate{position:fixed;inset:0;display:grid;place-items:center;padding:24px;background:rgba(6,18,31,.95);z-index:10}
+.gate-box{width:min(100%,360px);display:grid;gap:14px;text-align:center}
+.gate-box h1{font-family:var(--display);font-weight:600;letter-spacing:.32em;color:var(--holo);margin:0;font-size:1.6rem}
+.gate-box p{margin:0;color:var(--muted)}
+.gate-box input{background:var(--hull);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center;font-size:18px;letter-spacing:.15em;outline:0}
+.gate-box input:focus{border-color:var(--holo)}
+.gate-err{color:var(--signal);min-height:1.5em}
+
+@media (max-width:420px){ .link span:last-child{display:none} }
+@media (min-width:900px){
+  .main{grid-template-columns:minmax(300px,1fr) 1.2fr;grid-template-rows:minmax(0,1fr);align-items:center}
+  .core{width:min(34vw,380px)}
+  .log{height:100%;padding-top:24px}
+}
+@media (prefers-reduced-motion:reduce){ .spin,.pulse{animation:none!important} }
+</style>
+</head>
+<body data-state="idle">
+
+<div class="app">
+  <header class="bar">
+    <span class="mark">RONDA</span>
+    <div class="bar-right">
+      <span class="link" id="link"><span class="dot"></span><span id="linkText">Non collegato</span></span>
+      <button class="pill" id="reloadBtn">Aggiorna</button>
+      <button class="pill" id="voiceBtn" aria-pressed="true">Voce attiva</button>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="stage">
+      <button class="core" id="core" aria-label="Tocca per parlare">
+        <svg viewBox="0 0 200 200" aria-hidden="true">
+          <defs>
+            <radialGradient id="glow"><stop offset="0" stop-color="currentColor" stop-opacity=".35"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></radialGradient>
+            <linearGradient id="sw" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="currentColor" stop-opacity="0"/><stop offset="1" stop-color="currentColor" stop-opacity=".35"/></linearGradient>
+          </defs>
+          <circle cx="100" cy="100" r="99" fill="none" stroke="currentColor" stroke-opacity=".18"/>
+          <g class="spin r1"><circle cx="100" cy="100" r="93" fill="none" stroke="currentColor" stroke-width="7" stroke-dasharray="1 4.84" stroke-opacity=".7"/></g>
+          <g class="spin r2"><circle cx="100" cy="100" r="80" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="70 12 18 12 36 12" stroke-linecap="round"/></g>
+          <g class="spin sweep"><path d="M100 100 L100 30 A70 70 0 0 1 160.6 65 Z" fill="url(#sw)"/></g>
+          <circle cx="100" cy="100" r="68" fill="none" stroke="currentColor" stroke-opacity=".35"/>
+          <g class="spin r3"><circle cx="100" cy="100" r="58" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 8"/></g>
+          <circle cx="100" cy="100" r="46" fill="url(#glow)"/>
+          <circle class="pulse" cx="100" cy="100" r="38" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+            <rect x="92" y="80" width="16" height="26" rx="8"/>
+            <path d="M84 98a16 16 0 0 0 32 0M100 114v8"/>
+          </g>
+        </svg>
+      </button>
+      <div class="state" id="state" aria-live="polite">Tocca per parlare</div>
+    </section>
+
+    <section class="log" id="log" aria-live="polite">
+      <div class="empty" id="empty">
+        <p>Chiedimi delle partite: per categoria, avversario, giorno o periodo, in casa o in trasferta.</p>
+        <details><summary>Colonne riconosciute nel foglio</summary><div class="diag" id="diag"></div></details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="dock">
+    <div class="chips" id="chips"></div>
+    <div class="input">
+      <button class="mic" id="mic" aria-label="Parla">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      </button>
+      <input id="q" type="text" placeholder="Scrivi una domanda…" autocomplete="off" enterkeyhint="send">
+      <button class="send" id="send">Chiedi</button>
+    </div>
+  </footer>
+</div>
+
+<section class="gate" id="gate" hidden>
+  <div class="gate-box">
+    <h1>RONDA</h1>
+    <p>Inserisci il codice d'accesso del Gestionale Incontri.</p>
+    <input id="codeIn" type="password" autocomplete="off" aria-label="Codice d'accesso">
+    <button class="send" id="enter">Entra</button>
+    <div class="gate-err" id="gateErr" aria-live="polite"></div>
+  </div>
+</section>
+
+<script>
+// Se ospiti questa pagina fuori da Apps Script (es. GitHub Pages), incolla qui l'URL /exec della Web App
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbxffpGDnYfBayDiCb1HAvoN9MxWW5j09L4BK3VPZVRuUNN5l1dPvBXbVf1BfxwgF4C5/exec';
+
+const $ = id => document.getElementById(id);
+const hasGAS = typeof google !== 'undefined' && google.script && google.script.run;
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const tts = 'speechSynthesis' in window ? window.speechSynthesis : null;
+const store = {
+  get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} },
+  del: k => { try { localStorage.removeItem(k); } catch (e) {} }
+};
+
+let code = store.get('ronda_code') || '';
+let matches = [], cats = [], catKeys = [], opps = [];
+let lastF = null, lastList = [];
+let state = 'idle', busy = false;
+let micBlocked = !SR;
+let voiceOn = store.get('ronda_voice') !== 'off' && !!tts;
+
+/* ======================= Date e testo ======================= */
+const GIORNI = ['domenica','lunedi','martedi','mercoledi','giovedi','venerdi','sabato'];
+const GIORNI_TXT = ['domenica','lunedì','martedì','mercoledì','giovedì','venerdì','sabato'];
+const MESI = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+const pad = n => String(n).padStart(2, '0');
+const iso = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+const fromIso = s => { const p = s.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const today0 = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/under\s*(\d+)/g, 'u$1').replace(/\bu\s+(\d+)/g, 'u$1')
+  .replace(/[^a-z0-9\/: ]+/g, ' ').replace(/\s+/g, ' ').trim();
+const compact = s => norm(s).replace(/[^a-z0-9]/g, '');
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const joinIt = a => a.length < 2 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' e ' + a[a.length - 1];
+
+function dayText(ds) {
+  const d = fromIso(ds), t = today0();
+  const diff = Math.round((d - t) / 864e5);
+  if (diff === 0) return 'oggi';
+  if (diff === 1) return 'domani';
+  if (diff === -1) return 'ieri';
+  return GIORNI_TXT[d.getDay()] + ' ' + d.getDate() + ' ' + MESI[d.getMonth()];
+}
+function dayShort(ds) {
+  const d = fromIso(ds);
+  return GIORNI_TXT[d.getDay()].slice(0, 3) + ' ' + d.getDate() + ' ' + MESI[d.getMonth()].slice(0, 3);
+}
+
+/* ======================= Indice dei dati ======================= */
+const STOP = new Set(['calcio','asd','ssd','usd','polisportiva','sportiva','sporting','sport','club','oratorio',
+  'academy','accademia','associazione','societa','football','team','united','della','delle','dello','santa',
+  'juniores','squadra','partita','partite','casa','trasferta','prossima','prossimo','contro','quando','giochiamo']
+  .concat(GIORNI, MESI));
+
+function buildIndex() {
+  matches.forEach(m => { m.catKey = m.cat; });
+  cats = [...new Set(matches.map(m => m.cat).filter(Boolean))];
+  catKeys = cats.map(c => ({ c: c, k: compact(c) })).filter(x => x.k.length >= 2).sort((a, b) => b.k.length - a.k.length);
+  opps = [...new Set(matches.map(m => m.opp).filter(Boolean))].map(o => ({
+    o: o, full: norm(o),
+    toks: norm(o).split(' ').filter(t => t.length >= 4 && !STOP.has(t) && !/^\d+$/.test(t))
+  }));
+}
+
+/* ======================= Interpretazione della domanda ======================= */
+function parseWindow(n) {
+  const t = today0();
+  const W = (a, b, label) => ({ from: iso(a), to: iso(b || a), label: label });
+  const monday = addDays(t, -((t.getDay() + 6) % 7));
+
+  if (/\bdopodomani\b/.test(n)) return W(addDays(t, 2), null, 'dopodomani');
+  if (/\bdomani\b/.test(n)) return W(addDays(t, 1), null, 'domani');
+  if (/\boggi\b|\bstasera\b|\bstamattina\b/.test(n)) return W(t, null, 'oggi');
+  if (/\bieri\b/.test(n)) return W(addDays(t, -1), null, 'ieri');
+
+  if (/weekend|week end|fine settimana|sabato e domenica/.test(n)) {
+    let sat = t.getDay() === 0 ? addDays(t, -1) : addDays(t, 6 - t.getDay());
+    if (/scors/.test(n)) return W(addDays(sat, -7), addDays(sat, -6), 'lo scorso weekend');
+    return W(sat < t ? t : sat, addDays(sat, 1), 'nel weekend');
+  }
+  if (/prossima settimana|settimana prossima/.test(n)) return W(addDays(monday, 7), addDays(monday, 13), 'la prossima settimana');
+  if (/settimana scorsa|scorsa settimana/.test(n)) return W(addDays(monday, -7), addDays(monday, -1), 'la settimana scorsa');
+  if (/\bsettimana\b/.test(n)) return W(t, addDays(monday, 6), 'questa settimana');
+  if (/prossimo mese|mese prossimo/.test(n)) {
+    return W(new Date(t.getFullYear(), t.getMonth() + 1, 1), new Date(t.getFullYear(), t.getMonth() + 2, 0), 'il prossimo mese');
+  }
+  if (/\bmese\b/.test(n)) return W(t, new Date(t.getFullYear(), t.getMonth() + 1, 0), 'questo mese');
+
+  const mesiRe = MESI.join('|');
+  let m = n.match(new RegExp('\\b(\\d{1,2}) (' + mesiRe + ')\\b'));
+  if (m) { const d = nearest(Number(m[1]), MESI.indexOf(m[2])); return W(d, null, dayText(iso(d))); }
+  m = n.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12) {
+    const d = m[3] ? new Date(m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]), m[2] - 1, m[1]) : nearest(Number(m[1]), m[2] - 1);
+    return W(d, null, dayText(iso(d)));
+  }
+  m = n.match(new RegExp('\\b(' + mesiRe + ')\\b'));
+  if (m) {
+    const mi = MESI.indexOf(m[1]);
+    let y = t.getFullYear();
+    if (mi < t.getMonth() - 2) y++;
+    else if (mi > t.getMonth() + 9) y--;
+    return W(new Date(y, mi, 1), new Date(y, mi + 1, 0), 'a ' + m[1]);
+  }
+  m = n.match(new RegExp('\\b(' + GIORNI.join('|') + ')\\b'));
+  if (m) {
+    const target = GIORNI.indexOf(m[1]);
+    let diff = (target - t.getDay() + 7) % 7;
+    if (/scors/.test(n)) diff = diff === 0 ? -7 : diff - 7;
+    else if (diff === 0 && new RegExp(m[1] + ' prossim|prossim[ao] ' + m[1]).test(n)) diff = 7;
+    const d = addDays(t, diff);
+    return W(d, null, dayText(iso(d)));
+  }
+  return null;
+}
+function nearest(day, mi) {
+  const t = today0();
+  return [t.getFullYear() - 1, t.getFullYear(), t.getFullYear() + 1]
+    .map(y => new Date(y, mi, day))
+    .sort((a, b) => Math.abs(a - t) - Math.abs(b - t))[0];
+}
+
+function parse(q) {
+  const n = norm(q);
+  const padded = ' ' + n + ' ';
+  const words = new Set(n.split(' '));
+  const f = { cats: [], opps: [], home: null, notif: null, win: null, mode: null, count: false, focus: null };
+
+  const qc = compact(q);
+  catKeys.forEach(x => { if (qc.includes(x.k) && !f.cats.some(c => compact(c).includes(x.k))) f.cats.push(x.c); });
+
+  let best = 0;
+  opps.forEach(o => {
+    const s = padded.includes(' ' + o.full + ' ') ? 100 : o.toks.filter(t => words.has(t)).length;
+    if (s > best) { best = s; f.opps = [o.o]; } else if (s && s === best) f.opps.push(o.o);
+  });
+
+  if (/fuori casa|trasfert|\bfuori\b/.test(n)) f.home = false;
+  else if (/\bcasa\b/.test(n)) f.home = true;
+
+  if (/non (ancora )?(notificat|avvisat|comunicat)|da notificare|senza notifica/.test(n)) f.notif = false;
+  else if (/\bnotificat/.test(n)) f.notif = true;
+
+  f.win = parseWindow(n);
+
+  if (/\bultim|\bprecedent|com e andata|abbiamo giocato|\bscors[ao] (partit|gara)/.test(n)) f.mode = 'last';
+  else if (/\bprossim[ao]\b(?! (settimana|mese|weekend|week|fine))|quando (giochiamo|gioca|si gioca|giocano)/.test(n)) f.mode = 'next';
+
+  f.count = /\bquant[ei]\b/.test(n);
+  if (/\bdove\b|indirizz|\bcampo\b/.test(n)) f.focus = 'dove';
+  else if (/\bora\b|orario|a che ora/.test(n)) f.focus = 'ora';
+
+  f.any = !!(f.cats.length || f.opps.length || f.home !== null || f.notif !== null || f.win || f.mode || f.count ||
+    /partit|gioc|\bgar[ae]\b|incontr|calendar|impegn/.test(n));
+
+  // Domande di seguito: "e l'U15?", "e in trasferta?"
+  if (/^e\b/.test(n) && lastF) {
+    const merged = Object.assign({}, lastF);
+    if (f.cats.length) merged.cats = f.cats;
+    if (f.opps.length) merged.opps = f.opps;
+    if (f.home !== null) merged.home = f.home;
+    if (f.notif !== null) merged.notif = f.notif;
+    if (f.win) merged.win = f.win;
+    if (f.mode) merged.mode = f.mode;
+    merged.count = f.count || merged.count;
+    merged.focus = f.focus;
+    merged.any = true;
+    return merged;
+  }
+  return f;
+}
+
+function run(f) {
+  const today = iso(today0());
+  let list = matches.filter(m =>
+    (!f.cats.length || f.cats.includes(m.cat)) &&
+    (!f.opps.length || f.opps.includes(m.opp)) &&
+    (f.home === null || m.home === f.home) &&
+    (f.notif === null || m.notif === f.notif));
+
+  if (f.win) {
+    list = list.filter(m => m.d >= f.win.from && m.d <= f.win.to);
+    if (f.mode === 'last') list.reverse();
+  } else if (f.mode === 'last') {
+    list = list.filter(m => m.d < today).reverse();
+  } else {
+    const up = list.filter(m => m.d >= today);
+    list = (!up.length && f.opps.length) ? list.filter(m => m.d < today).reverse() : up;
+  }
+  if ((f.mode === 'next' || f.mode === 'last') && list.length) {
+    const first = list[0].d;
+    list = list.filter(m => m.d === first);
+    if (f.mode === 'last') list.reverse();
+  }
+  return list;
+}
+
+/* ======================= Risposta ======================= */
+function describe(f) {
+  const p = [];
+  if (f.cats.length) p.push('per ' + joinIt(f.cats));
+  if (f.opps.length) p.push('contro ' + joinIt(f.opps));
+  if (f.home === true) p.push('in casa');
+  if (f.home === false) p.push('in trasferta');
+  if (f.notif === false) p.push('non ancora notificate');
+  if (f.notif === true) p.push('già notificate');
+  if (f.win) p.push(f.win.label);
+  return p.join(' ');
+}
+
+function sentence(m, f) {
+  let s = cap(dayText(m.d));
+  if (m.t) s += ' alle ' + m.t;
+  s += ', ' + (f.cats.length === 1 ? '' : m.cat + ' ');
+  s += m.opp ? 'contro ' + m.opp : 'avversario da definire';
+  if (m.home === true && f.home === null) s += ', in casa';
+  if (m.home === false && f.home === null) s += ', in trasferta';
+  if (m.place) s += ', presso ' + m.place;
+  else if (f.focus === 'dove') s += ', il luogo non è indicato nel foglio';
+  return s.replace(', contro', ' contro') + '.';
+}
+
+function answer(f) {
+  const today = iso(today0());
+  const list = run(f);
+  const d = describe(f);
+  const past = list.length && list[0].d < today;
+
+  if (!list.length) {
+    if (f.mode === 'last') return { text: 'Non trovo partite già giocate' + (d ? ' ' + d : '') + '.', list };
+    return { text: 'Non trovo partite' + (f.win ? '' : ' in programma') + (d ? ' ' + d : '') + '.', list };
+  }
+  const n = list.length;
+  const det = list.slice(0, 3).map(m => sentence(m, f)).join(' ');
+  const rest = n > 3 ? ' Le altre ' + (n - 3) + ' sono nell\'elenco qui sotto.' : '';
+
+  if (f.count) {
+    return { text: (n === 1 ? 'C\'è una partita' : 'Ci sono ' + n + ' partite') + (d ? ' ' + d : '') + '.' + (n <= 3 ? ' ' + det : ''), list };
+  }
+  if (n === 1) {
+    const intro = past && !f.win && f.mode !== 'last' ? 'Non ci sono partite in programma, l\'ultima è stata: ' : '';
+    return { text: intro + sentence(list[0], f), list };
+  }
+  if (f.mode === 'next' || f.mode === 'last') {
+    const verb = f.mode === 'next' ? 'Il prossimo impegno è' : 'L\'ultimo impegno è stato';
+    return { text: verb + ' ' + dayText(list[0].d) + ', con ' + n + ' partite. ' + det + rest, list };
+  }
+  return { text: 'Ho trovato ' + n + ' partite' + (d ? ' ' + d : '') + '. ' + det + rest, list };
+}
+
+function helpText() {
+  const c = cats[0] || 'U17';
+  return 'Posso cercare le partite per categoria, avversario, giorno o periodo, in casa o in trasferta. ' +
+    'Prova con "prossima partita ' + c + '", "trasferte di ottobre" o "partite non ancora notificate".';
+}
+
+/* ======================= Server ======================= */
+function call(action, payload) {
+  payload = Object.assign({ action: action }, payload);
+  if (hasGAS) return new Promise((res, rej) =>
+    google.script.run.withSuccessHandler(res).withFailureHandler(rej).api(action, payload));
+  if (!ENDPOINT) return Promise.reject(new Error("Imposta ENDPOINT con l'URL della Web App."));
+  return fetch(ENDPOINT, { method: 'POST', body: JSON.stringify(payload) }).then(r => r.json());
+}
+
+/* ======================= Stato visivo ======================= */
+const LABELS = {
+  idle: () => micBlocked ? 'Scrivi una domanda qui sotto' : 'Tocca per parlare',
+  listening: () => 'In ascolto…',
+  thinking: () => 'Carico i dati del gestionale…',
+  speaking: () => 'Tocca per interrompere',
+  error: () => 'Qualcosa non ha funzionato'
+};
+function setState(s, label) {
+  state = s;
+  document.body.dataset.state = s;
+  $('state').textContent = label || LABELS[s]();
+}
+
+/* ======================= Registro ======================= */
+const scrollLog = () => { const l = $('log'); l.scrollTop = l.scrollHeight; };
+
+function addMsg(kind, text) {
+  $('empty').hidden = true;
+  const el = document.createElement('div');
+  el.className = 'msg ' + kind;
+  el.textContent = text;
+  $('log').appendChild(el);
+  scrollLog();
+  return el;
+}
+
+function addAnswer(text, list) {
+  const el = addMsg('ronda', '');
+  const body = document.createElement('div');
+  el.appendChild(body);
+  const done = () => {
+    if (list && list.length > 1) el.appendChild(rowsEl(list));
+    scrollLog();
+  };
+  if (reduce) { body.textContent = text; return done(); }
+  let i = 0;
+  (function step() {
+    i = Math.min(text.length, i + 3);
+    body.textContent = text.slice(0, i);
+    scrollLog();
+    i < text.length ? setTimeout(step, 14) : done();
+  })();
+}
+
+function rowsEl(list) {
+  const wrap = document.createElement('div');
+  wrap.className = 'rows';
+  list.slice(0, 30).forEach(m => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const when = document.createElement('span');
+    when.className = 'when';
+    when.textContent = dayShort(m.d) + (m.t ? '\n' + m.t : '');
+    when.style.whiteSpace = 'pre-line';
+    const what = document.createElement('span');
+    what.textContent = m.cat + ' contro ' + (m.opp || 'da definire');
+    if (m.home !== null) {
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.textContent = m.home ? 'casa' : 'trasferta';
+      what.appendChild(tag);
+    }
+    if (m.notif === false) {
+      const tag = document.createElement('span');
+      tag.className = 'tag warn';
+      tag.textContent = 'da notificare';
+      what.appendChild(tag);
+    }
+    row.append(when, what);
+    if (m.place) {
+      const where = document.createElement('span');
+      where.className = 'where';
+      where.textContent = m.place;
+      row.appendChild(where);
+    }
+    wrap.appendChild(row);
+  });
+  if (list.length > 30) {
+    const more = document.createElement('div');
+    more.className = 'where';
+    more.textContent = 'E altre ' + (list.length - 30) + ' partite. Restringi la domanda per vederle.';
+    wrap.appendChild(more);
+  }
+  return wrap;
+}
+
+/* ======================= Voce in uscita ======================= */
+let itVoice = null;
+function pickVoice() {
+  if (!tts) return;
+  const vs = tts.getVoices().filter(v => (v.lang || '').toLowerCase().startsWith('it'));
+  itVoice = vs.find(v => /Luca|Alice|Federica|Google/i.test(v.name)) || vs[0] || null;
+}
+if (tts) { pickVoice(); tts.onvoiceschanged = pickVoice; }
+
+let unlocked = false;
+function unlockVoice() { // iOS: la sintesi vocale va attivata dentro un gesto dell'utente
+  if (unlocked || !tts) return;
+  unlocked = true;
+  const u = new SpeechSynthesisUtterance(' ');
+  u.volume = 0;
+  tts.speak(u);
+}
+document.addEventListener('pointerdown', unlockVoice, { once: true });
+
+function speak(text) {
+  if (!voiceOn || !tts) return false;
+  tts.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'it-IT';
+  if (itVoice) u.voice = itVoice;
+  u.rate = 1.05; u.pitch = .95;
+  u.onstart = () => setState('speaking');
+  u.onend = u.onerror = () => { if (state === 'speaking') setState('idle'); };
+  tts.speak(u);
+  return true;
+}
+
+function renderVoiceBtn() {
+  $('voiceBtn').hidden = !tts;
+  $('voiceBtn').setAttribute('aria-pressed', voiceOn);
+  $('voiceBtn').textContent = voiceOn ? 'Voce attiva' : 'Voce spenta';
+}
+$('voiceBtn').onclick = () => {
+  voiceOn = !voiceOn;
+  store.set('ronda_voice', voiceOn ? 'on' : 'off');
+  if (!voiceOn && tts) { tts.cancel(); if (state === 'speaking') setState('idle'); }
+  renderVoiceBtn();
+};
+
+/* ======================= Voce in ingresso ======================= */
+let rec = null;
+function listen() {
+  if (micBlocked) { $('q').focus(); return; }
+  if (tts) tts.cancel();
+  rec = new SR();
+  rec.lang = 'it-IT';
+  rec.interimResults = true;
+  let finalText = '';
+  rec.onresult = e => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalText += t; else interim += t;
+    }
+    $('q').value = (finalText + interim).trim();
+  };
+  rec.onerror = e => {
+    if (['not-allowed', 'service-not-allowed', 'audio-capture'].includes(e.error)) {
+      micBlocked = true;
+      $('mic').hidden = true;
+      setState('error', 'Il microfono non è disponibile qui. Scrivi la domanda qui sotto.');
+    } else if (e.error === 'no-speech') {
+      setState('idle', 'Non ho sentito nulla. Tocca e riprova.');
+    } else if (e.error !== 'aborted') {
+      setState('error', 'Errore del microfono (' + e.error + ').');
+    }
+  };
+  rec.onend = () => {
+    rec = null;
+    if (finalText.trim()) send(finalText);
+    else if (state === 'listening') setState('idle');
+  };
+  try { rec.start(); setState('listening'); } catch (err) { setState('idle'); }
+}
+
+$('core').onclick = () => {
+  unlockVoice();
+  if (state === 'listening' && rec) return rec.stop();
+  if (state === 'speaking') { tts.cancel(); return setState('idle'); }
+  if (state === 'thinking') return;
+  listen();
+};
+$('mic').onclick = $('core').onclick;
+if (!SR) $('mic').hidden = true;
+
+/* ======================= Domande ======================= */
+function send(text) {
+  text = String(text || '').trim();
+  if (!text || busy) return;
+  $('q').value = '';
+  addMsg('user', text);
+
+  if (!matches.length) {
+    const t = 'Non ho ancora dati dal gestionale. Tocca "Aggiorna" e riprova.';
+    addAnswer(t); if (!speak(t)) setState('idle');
+    return;
+  }
+
+  let f = parse(text);
+  let out;
+  if (!f.any && lastList.length && (f.focus || /\bchi\b/.test(norm(text)))) {
+    const ff = Object.assign({}, lastF, { focus: f.focus });
+    out = { text: lastList.slice(0, 3).map(m => sentence(m, ff)).join(' '), list: lastList };
+  } else if (!f.any) {
+    out = { text: helpText(), list: [] };
+  } else {
+    out = answer(f);
+    lastF = f;
+    lastList = out.list;
+  }
+  const talking = speak(out.text);
+  addAnswer(out.text, out.list);
+  if (!talking) setState('idle');
+}
+
+$('send').onclick = () => send($('q').value);
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); send($('q').value); } });
+$('chips').addEventListener('click', e => { if (e.target.classList.contains('chip')) send(e.target.textContent); });
+
+function renderChips() {
+  const list = ['Prossima partita', 'Partite di questo weekend', 'Trasferte di questo mese', 'Partite non ancora notificate'];
+  if (cats.length) list.splice(1, 0, 'Prossima partita ' + cats[0]);
+  $('chips').replaceChildren(...list.map(t => {
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.textContent = t;
+    return b;
+  }));
+}
+
+function renderDiag(diag) {
+  const labels = { data: 'data', ora: 'ora', categoria: 'categoria', avversario: 'avversario', casaTrasferta: 'casa/trasferta',
+    squadraCasa: 'squadra di casa', squadraOspite: 'squadra ospite', luogo: 'luogo', notificato: 'notificato' };
+  $('diag').replaceChildren(...(diag.length ? diag : [null]).map(s => {
+    const p = document.createElement('div');
+    p.textContent = s
+      ? s.sheet + ': ' + Object.keys(s.columns).map(k => labels[k] + ' = "' + s.columns[k] + '"').join(', ')
+      : 'Nessun foglio con una colonna "Data" trovato.';
+    return p;
+  }));
+}
+
+/* ======================= Accesso e caricamento ======================= */
+function showGate(msg) {
+  $('gate').hidden = false;
+  $('gateErr').textContent = msg || '';
+  setTimeout(() => $('codeIn').focus(), 50);
+}
+
+async function connect(c, refresh) {
+  $('enter').disabled = true;
+  $('gateErr').textContent = '';
+  setState('thinking');
+  try {
+    const res = await call('load', { code: c, refresh: !!refresh });
+    if (!res || !res.ok) throw new Error((res && res.error) || 'Impossibile collegarsi.');
+    code = c;
+    store.set('ronda_code', c);
+    $('gate').hidden = true;
+    matches = res.matches || [];
+    buildIndex();
+    renderChips();
+    renderDiag(res.diag || []);
+    $('link').classList.add('on');
+    $('linkText').textContent = matches.length + ' partite';
+    setState('idle');
+  } catch (err) {
+    const msg = (err && err.message) || String(err);
+    if (/codice d'accesso|ACCESS_CODE/i.test(msg) || !code) { store.del('ronda_code'); showGate(msg); setState('idle'); }
+    else { addMsg('error', msg); setState('error'); }
+  } finally {
+    $('enter').disabled = false;
+  }
+}
+
+$('enter').onclick = () => connect($('codeIn').value.trim(), true);
+$('codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') connect($('codeIn').value.trim(), true); });
+$('reloadBtn').onclick = () => { if (code) connect(code, true); };
+
+renderVoiceBtn();
+renderChips();
+setState('idle');
+code ? connect(code, true) : showGate();
+</script>
+</body>
+</html>
