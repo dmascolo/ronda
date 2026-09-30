@@ -47,7 +47,14 @@ button,input{font:inherit;color:inherit}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
 .link.on .dot{background:var(--holo);box-shadow:0 0 8px var(--holo)}
 .pill{background:none;border:1px solid var(--line);border-radius:999px;padding:3px 11px;cursor:pointer;font-size:.8rem;color:var(--muted)}
-.pill[aria-pressed="true"]{color:var(--holo);border-color:var(--holo)}
+.pill[aria-pressed="true"],.pill[aria-expanded="true"]{color:var(--holo);border-color:var(--holo)}
+.bar{position:relative}
+.panel{position:absolute;right:0;top:calc(100% + 6px);z-index:5;width:min(300px,calc(100vw - 32px));
+  background:var(--hull);border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;gap:10px;box-shadow:0 12px 30px rgba(0,0,0,.4)}
+.field{display:grid;gap:4px;font-size:.8rem;color:var(--muted)}
+.field select{background:var(--abyss);border:1px solid var(--line);border-radius:8px;padding:8px;color:var(--text);font:inherit;font-size:16px}
+.panel-row{display:flex;gap:8px}
+.hint{margin:0;font-size:.78rem;color:var(--muted)}
 
 .main{min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr);gap:10px}
 .stage{display:grid;justify-items:center;gap:6px;padding-top:4px}
@@ -121,7 +128,15 @@ body[data-state="listening"] .mic{background:var(--holo);color:var(--abyss)}
     <div class="bar-right">
       <span class="link" id="link"><span class="dot"></span><span id="linkText">Non collegato</span></span>
       <button class="pill" id="reloadBtn">Aggiorna</button>
-      <button class="pill" id="voiceBtn" aria-pressed="true">Voce attiva</button>
+      <button class="pill" id="voiceBtn" aria-expanded="false">Voce</button>
+    </div>
+    <div class="panel" id="voicePanel" hidden>
+      <label class="field"><span>Voce di RONDA</span><select id="voiceSel"></select></label>
+      <div class="panel-row">
+        <button class="pill" id="voiceToggle" aria-pressed="true">Voce attiva</button>
+        <button class="pill" id="voiceTest">Prova</button>
+      </div>
+      <p class="hint">Le voci sono quelle installate sul dispositivo. Su iPhone puoi scaricare le versioni "Avanzata" o "Premium" in Impostazioni → Accessibilità → Contenuti letti → Voci.</p>
     </div>
   </header>
 
@@ -182,7 +197,7 @@ body[data-state="listening"] .mic{background:var(--holo);color:var(--abyss)}
 
 <script>
 // Se ospiti questa pagina fuori da Apps Script (es. GitHub Pages), incolla qui l'URL /exec della Web App
-const ENDPOINT = 'https://script.google.com/macros/s/AKfycbxffpGDnYfBayDiCb1HAvoN9MxWW5j09L4BK3VPZVRuUNN5l1dPvBXbVf1BfxwgF4C5/exec';
+const ENDPOINT = '';
 
 const $ = id => document.getElementById(id);
 const hasGAS = typeof google !== 'undefined' && google.script && google.script.run;
@@ -412,8 +427,8 @@ function answer(f) {
   const past = list.length && list[0].d < today;
 
   if (!list.length) {
-    if (f.mode === 'last') return { text: 'Non trovo partite già giocate' + (d ? ' ' + d : '') + '.', list };
-    return { text: 'Non trovo partite' + (f.win ? '' : ' in programma') + (d ? ' ' + d : '') + '.', list };
+    if (f.mode === 'last') return { text: 'Non risultano partite già giocate' + (d ? ' ' + d : '') + '.', list };
+    return { text: 'Non risultano partite' + (f.win ? '' : ' in programma') + (d ? ' ' + d : '') + '.', list };
   }
   const n = list.length;
   const det = list.slice(0, 3).map(m => sentence(m, f)).join(' ');
@@ -423,19 +438,21 @@ function answer(f) {
     return { text: (n === 1 ? 'C\'è una partita' : 'Ci sono ' + n + ' partite') + (d ? ' ' + d : '') + '.' + (n <= 3 ? ' ' + det : ''), list };
   }
   if (n === 1) {
-    const intro = past && !f.win && f.mode !== 'last' ? 'Non ci sono partite in programma, l\'ultima è stata: ' : '';
+    const intro = past && !f.win && f.mode !== 'last' ? 'Non risultano partite in programma. L\'ultima è stata: ' : pick(['', 'Certo. ', 'Ecco. ']);
     return { text: intro + sentence(list[0], f), list };
   }
   if (f.mode === 'next' || f.mode === 'last') {
     const verb = f.mode === 'next' ? 'Il prossimo impegno è' : 'L\'ultimo impegno è stato';
     return { text: verb + ' ' + dayText(list[0].d) + ', con ' + n + ' partite. ' + det + rest, list };
   }
-  return { text: 'Ho trovato ' + n + ' partite' + (d ? ' ' + d : '') + '. ' + det + rest, list };
+  return { text: 'Risultano ' + n + ' partite' + (d ? ' ' + d : '') + '. ' + det + rest, list };
 }
+
+const pick = a => a[Math.floor(Math.random() * a.length)];
 
 function helpText() {
   const c = cats[0] || 'U17';
-  return 'Posso cercare le partite per categoria, avversario, giorno o periodo, in casa o in trasferta. ' +
+  return 'Sono a disposizione. Posso cercare le partite per categoria, avversario, giorno o periodo, in casa o in trasferta. ' +
     'Prova con "prossima partita ' + c + '", "trasferte di ottobre" o "partite non ancora notificate".';
 }
 
@@ -536,13 +553,24 @@ function rowsEl(list) {
 }
 
 /* ======================= Voce in uscita ======================= */
-let itVoice = null;
-function pickVoice() {
+let voices = [], itVoice = null;
+function loadVoices() {
   if (!tts) return;
-  const vs = tts.getVoices().filter(v => (v.lang || '').toLowerCase().startsWith('it'));
-  itVoice = vs.find(v => /Luca|Alice|Federica|Google/i.test(v.name)) || vs[0] || null;
+  voices = tts.getVoices().filter(v => (v.lang || '').toLowerCase().startsWith('it'));
+  const saved = store.get('ronda_voice_name');
+  itVoice = voices.find(v => v.name === saved)
+    || voices.find(v => /Luca|Diego|Cosimo/i.test(v.name))          // voci maschili, più "da assistente di bordo"
+    || voices.find(v => /Google italiano|Alice|Federica|Paola/i.test(v.name))
+    || voices[0] || null;
+  $('voiceSel').replaceChildren(...(voices.length ? voices : [null]).map(v => {
+    const o = document.createElement('option');
+    o.value = v ? v.name : '';
+    o.textContent = v ? v.name + (v.localService ? '' : ' (online)') : 'Voce predefinita del dispositivo';
+    o.selected = !!(v && itVoice && v.name === itVoice.name);
+    return o;
+  }));
 }
-if (tts) { pickVoice(); tts.onvoiceschanged = pickVoice; }
+if (tts) { loadVoices(); tts.onvoiceschanged = loadVoices; }
 
 let unlocked = false;
 function unlockVoice() { // iOS: la sintesi vocale va attivata dentro un gesto dell'utente
@@ -554,25 +582,43 @@ function unlockVoice() { // iOS: la sintesi vocale va attivata dentro un gesto d
 }
 document.addEventListener('pointerdown', unlockVoice, { once: true });
 
-function speak(text) {
-  if (!voiceOn || !tts) return false;
+function speak(text, force) {
+  if (!tts || !(voiceOn || force)) return false;
   tts.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = 'it-IT';
   if (itVoice) u.voice = itVoice;
-  u.rate = 1.05; u.pitch = .95;
+  u.rate = 0.95;   // ritmo pacato
+  u.pitch = 0.88;  // tono leggermente più basso
   u.onstart = () => setState('speaking');
   u.onend = u.onerror = () => { if (state === 'speaking') setState('idle'); };
   tts.speak(u);
   return true;
 }
 
+const saluto = () => { const h = new Date().getHours(); return h < 13 ? 'Buongiorno' : h < 18 ? 'Buon pomeriggio' : 'Buonasera'; };
+
 function renderVoiceBtn() {
   $('voiceBtn').hidden = !tts;
-  $('voiceBtn').setAttribute('aria-pressed', voiceOn);
-  $('voiceBtn').textContent = voiceOn ? 'Voce attiva' : 'Voce spenta';
+  $('voiceBtn').textContent = voiceOn ? 'Voce' : 'Voce spenta';
+  $('voiceToggle').setAttribute('aria-pressed', voiceOn);
+  $('voiceToggle').textContent = voiceOn ? 'Voce attiva' : 'Voce spenta';
 }
-$('voiceBtn').onclick = () => {
+function togglePanel(open) {
+  $('voicePanel').hidden = !open;
+  $('voiceBtn').setAttribute('aria-expanded', open);
+}
+$('voiceBtn').onclick = () => togglePanel($('voicePanel').hidden);
+document.addEventListener('click', e => {
+  if (!$('voicePanel').hidden && !e.target.closest('#voicePanel, #voiceBtn')) togglePanel(false);
+});
+$('voiceSel').onchange = e => {
+  itVoice = voices.find(v => v.name === e.target.value) || null;
+  store.set('ronda_voice_name', e.target.value);
+  speak('Voce impostata. Sono a disposizione.', true);
+};
+$('voiceTest').onclick = () => { unlockVoice(); speak(saluto() + '. Sono RONDA, pronto a consultare il gestionale.', true); };
+$('voiceToggle').onclick = () => {
   voiceOn = !voiceOn;
   store.set('ronda_voice', voiceOn ? 'on' : 'off');
   if (!voiceOn && tts) { tts.cancel(); if (state === 'speaking') setState('idle'); }
@@ -689,7 +735,7 @@ function showGate(msg) {
   setTimeout(() => $('codeIn').focus(), 50);
 }
 
-async function connect(c, refresh) {
+async function connect(c, refresh, greet) {
   $('enter').disabled = true;
   $('gateErr').textContent = '';
   setState('thinking');
@@ -706,6 +752,11 @@ async function connect(c, refresh) {
     $('link').classList.add('on');
     $('linkText').textContent = matches.length + ' partite';
     setState('idle');
+    if (greet) {
+      const t = saluto() + '. Collegamento stabilito: ' + matches.length + ' partite in archivio.';
+      addAnswer(t);
+      if (unlocked) speak(t);
+    }
   } catch (err) {
     const msg = (err && err.message) || String(err);
     if (/codice d'accesso|ACCESS_CODE/i.test(msg) || !code) { store.del('ronda_code'); showGate(msg); setState('idle'); }
@@ -715,14 +766,14 @@ async function connect(c, refresh) {
   }
 }
 
-$('enter').onclick = () => connect($('codeIn').value.trim(), true);
-$('codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') connect($('codeIn').value.trim(), true); });
+$('enter').onclick = () => connect($('codeIn').value.trim(), true, true);
+$('codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') connect($('codeIn').value.trim(), true, true); });
 $('reloadBtn').onclick = () => { if (code) connect(code, true); };
 
 renderVoiceBtn();
 renderChips();
 setState('idle');
-code ? connect(code, true) : showGate();
+code ? connect(code, true, true) : showGate();
 </script>
 </body>
 </html>
