@@ -31,4 +31,4 @@ window.RONDA_ALIASES = {
 
 // Facoltativo: categorie di pre-agonistica (nomi come nel foglio). Solo per queste si controllano le notifiche.
 // Se lasci commentato, RONDA le riconosce dal nome (Esordienti, Pulcini, U13 o inferiori, annate più giovani).
-window.RONDA_PREAGONISTICA = ['U13 - 2014', 'U12 - 2015', 'U11 - 2016'];
+window.RONDA_PREAGONISTICA = ['U13 - 2014', 'U12 - 2015', 'U11 - 2016A', 'U11 - 2016B', 'U10 - 2017A' , 'U10 - 2017B' , 'U9 - 2018A' , 'U9 - 2018B' , 'U8 - 2019A' , 'U8 - 2019B' , 'U7 - 2020A'];
