@@ -17,6 +17,14 @@ window.RONDA_ALIASES = {
   'U15 - 2012': { voce: 'under 15',      alias: ['U15', 'under 15', '2012', 'Giovanissimi A'] },
   'U14 - 2013': { voce: 'under 14',      alias: ['U14', 'under 14', '2013', 'Giovanissimi B'] },
   'U13 - 2014': { voce: 'under 13',      alias: ['U13', 'under 13', '2014', 'Esordienti A'] },
-  'U12 - 2015': { voce: 'under 12',      alias: ['U12', 'under 12', '2015', 'Esordienti B'] }
+  'U12 - 2015': { voce: 'under 12',      alias: ['U12', 'under 12', '2015', 'Esordienti B'] },
+  'U11 - 2016A': { voce: 'under 12',      alias: ['U11', 'under 11', '2016', 'Pulcini 2016'] },
+  'U11 - 2016B': { voce: 'under 12',      alias: ['U11', 'under 11', '2016', 'Pulcini 2016'] },
+  'U10 - 2017A': { voce: 'under 12',      alias: ['U10', 'under 10', '2017', 'Pulcini 2017'] },
+  'U10 - 2017B': { voce: 'under 12',      alias: ['U10', 'under 10', '2017', 'Pulcini 2017'] },
+  'U9 - 2018A': { voce: 'under 12',      alias: ['U9', 'under 9', '2018', 'Primi Calci 2018'] },
+  'U9 - 2018B': { voce: 'under 12',      alias: ['U9', 'under 9', '2018', 'Primi Calci 2018'] },
+  'U8 - 2019A': { voce: 'under 12',      alias: ['U8', 'under 8', '2019', 'Primi Calci 2019'] },
+  'U8 - 2019B': { voce: 'under 12',      alias: ['U8', 'under 8', '2019', 'Primi Calci 2019'] },
+  'U7 - 2020A': { voce: 'under 12',      alias: ['U7', 'under 7', '2020', 'Piccoli Amici'] }
  };
- 
