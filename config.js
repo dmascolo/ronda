@@ -28,3 +28,7 @@ window.RONDA_ALIASES = {
   'U8 - 2019B': { voce: 'under 12',      alias: ['U8', 'under 8', '2019', 'Primi Calci 2019'] },
   'U7 - 2020A': { voce: 'under 12',      alias: ['U7', 'under 7', '2020', 'Piccoli Amici'] }
  };
+
+// Facoltativo: categorie di pre-agonistica (nomi come nel foglio). Solo per queste si controllano le notifiche.
+// Se lasci commentato, RONDA le riconosce dal nome (Esordienti, Pulcini, U13 o inferiori, annate più giovani).
+window.RONDA_PREAGONISTICA = ['U13 - 2014', 'U12 - 2015', 'U11 - 2016'];
