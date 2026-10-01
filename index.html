@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#06121F">
-<title>RONDA · Gestionale Incontri</title>
+<title>ONLINE PLANNING</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
@@ -42,10 +42,10 @@ button,input{font:inherit;color:inherit}
 #net{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
 .app{position:relative;z-index:1}
 
-.app{height:100%;max-width:1120px;margin:0 auto;padding:10px 16px 12px;display:grid;grid-template-rows:auto 1fr auto;gap:8px}
+.app{height:100%;max-width:1120px;margin:0 auto;padding:10px 16px 12px;display:grid;grid-template-rows:auto 1fr auto;grid-template-columns:minmax(0,1fr);gap:8px}
 
 .bar{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding-bottom:8px}
-.mark{font-family:var(--display);font-weight:600;font-size:1.15rem;letter-spacing:.32em;color:var(--holo)}
+.mark{font-family:var(--display);font-weight:600;font-size:clamp(.9rem,3.6vw,1.15rem);letter-spacing:.18em;color:var(--holo);white-space:nowrap}
 .bar-right{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--muted)}
 .link{display:flex;align-items:center;gap:7px;margin-right:4px}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
@@ -98,7 +98,7 @@ body[data-state="listening"] .pulse,body[data-state="speaking"] .pulse{animation
 .tag{display:inline-block;font-size:.75rem;border:1px solid var(--line);border-radius:6px;padding:0 6px;margin-left:6px;color:var(--muted);vertical-align:1px}
 .tag.warn{border-color:var(--ember);color:var(--ember)}
 
-.dock{display:grid;gap:8px}
+.dock{display:grid;gap:8px;grid-template-columns:minmax(0,1fr)}
 .build{font-family:var(--display);font-size:.7rem;letter-spacing:.06em;color:var(--muted);opacity:.75;margin-top:-2px;user-select:all;text-align:right}
 .chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
 .chips::-webkit-scrollbar{display:none}
@@ -113,9 +113,9 @@ body[data-state="listening"] .mic{background:var(--holo);color:var(--abyss)}
 .send{flex:none;border:0;border-radius:10px;background:var(--holo);color:var(--abyss);font-family:var(--display);font-weight:600;padding:9px 16px;cursor:pointer}
 .send:disabled{opacity:.4;cursor:default}
 
-.boot{position:fixed;inset:0;z-index:9;display:grid;place-items:center;background:rgba(6,18,31,.9)}
+.boot{position:fixed;inset:0;z-index:9;display:grid;place-items:center;background:rgba(6,18,31,.97)}
 .boot-btn{background:none;border:0;cursor:pointer;display:grid;gap:10px;justify-items:center;padding:40px;color:var(--text)}
-.boot-btn .mark{font-size:2rem}
+.boot-btn .mark{font-size:clamp(1.3rem,6.4vw,2rem);letter-spacing:.2em}
 .boot-sub{color:var(--muted);font-size:.95rem}
 .boot-tap{font-family:var(--display);color:var(--holo);border:1px solid var(--holo);border-radius:999px;padding:8px 20px;margin-top:8px;animation:breathe 2s ease-in-out infinite}
 @keyframes breathe{50%{opacity:.45}}
@@ -139,7 +139,10 @@ body[data-state="listening"] .mic{background:var(--holo);color:var(--abyss)}
 .panel-sep{border:0;border-top:1px solid var(--line);margin:2px 0}
 .gate-err{color:var(--signal);min-height:1.5em}
 
-@media (max-width:420px){ .link span:last-child{display:none} }
+@media (max-width:540px){ .link span:last-child{display:none} .bar .mark{font-size:.82rem;letter-spacing:.1em} .bar-right{gap:6px} .pill{padding:3px 9px} }
+#reloadBtn .ic{display:none;font-size:1rem;line-height:1}
+@media (max-width:380px){ .bar .mark{font-size:.74rem;letter-spacing:.06em} .bar-right{gap:5px} .pill{padding:3px 8px;font-size:.76rem} }
+@media (max-width:540px){ #reloadBtn .ic{display:inline} #reloadBtn .lbl{display:none} }
 @media (min-width:900px){
   .main{grid-template-columns:minmax(300px,1fr) 1.2fr;grid-template-rows:minmax(0,1fr);align-items:center}
   .core{width:min(34vw,380px)}
@@ -153,10 +156,10 @@ body[data-state="listening"] .mic{background:var(--holo);color:var(--abyss)}
 
 <div class="app">
   <header class="bar">
-    <span><span class="mark">RONDA</span><span class="badge" id="modeBadge" hidden>AI</span></span>
+    <span><span class="mark">ONLINE PLANNING</span><span class="badge" id="modeBadge" hidden>AI</span></span>
     <div class="bar-right">
       <span class="link" id="link"><span class="dot"></span><span id="linkText">Non collegato</span></span>
-      <button class="pill" id="reloadBtn">Aggiorna</button>
+      <button class="pill" id="reloadBtn" aria-label="Aggiorna"><span class="ic" aria-hidden="true">↻</span><span class="lbl">Aggiorna</span></button>
       <button class="pill" id="voiceBtn" aria-expanded="false">Opzioni</button>
     </div>
     <div class="panel" id="voicePanel" hidden>
@@ -169,7 +172,7 @@ body[data-state="listening"] .mic{background:var(--holo);color:var(--abyss)}
         </div>
         <p class="hint" id="modeHint"></p>
       </div>
-      <label class="field"><span>Voce di RONDA</span><select id="voiceSel"></select></label>
+      <label class="field"><span>Voce</span><select id="voiceSel"></select></label>
       <div class="panel-row">
         <button class="pill" id="voiceToggle" aria-pressed="true">Voce attiva</button>
         <button class="pill" id="voiceTest">Prova</button>
@@ -228,7 +231,7 @@ body[data-state="listening"] .mic{background:var(--holo);color:var(--abyss)}
 
 <section class="boot" id="boot" hidden>
   <button class="boot-btn" id="bootBtn">
-    <span class="mark">RONDA</span>
+    <span class="mark">ONLINE PLANNING</span>
     <span class="boot-sub" id="bootSub">Avvio dei sistemi…</span>
     <span class="boot-tap">Tocca per iniziare</span>
   </button>
@@ -801,11 +804,10 @@ function unlockVoice() { // iOS: la sintesi vocale va attivata dentro un gesto d
   u.volume = 0;
   tts.speak(u);
 }
-document.addEventListener('pointerdown', unlockVoice, { once: true });
+['click', 'touchend', 'keydown'].forEach(ev => document.addEventListener(ev, unlockVoice, { once: true, capture: true }));
 
 function speak(text, force) {
   if (!tts || !(voiceOn || force)) return false;
-  tts.cancel();
   const u = new SpeechSynthesisUtterance(voiceText(text));
   u.lang = 'it-IT';
   if (itVoice) u.voice = itVoice;
@@ -813,7 +815,9 @@ function speak(text, force) {
   u.pitch = 0.88;  // tono leggermente più basso
   u.onstart = () => setState('speaking');
   u.onend = u.onerror = () => { if (state === 'speaking') setState('idle'); };
-  tts.speak(u);
+  // Chrome a volte scarta una frase pronunciata subito dopo cancel(): piccola pausa se c'era già audio
+  if (tts.speaking || tts.pending) { tts.cancel(); setTimeout(() => tts.speak(u), 80); }
+  else tts.speak(u);
   return true;
 }
 
@@ -836,7 +840,7 @@ $('voiceSel').onchange = e => {
   store.set('ronda_voice_name', e.target.value);
   speak('Voce impostata. Sono a disposizione.', true);
 };
-$('voiceTest').onclick = () => { unlockVoice(); speak(saluto() + '. Sono RONDA, pronto a consultare il gestionale.', true); };
+$('voiceTest').onclick = () => { unlockVoice(); speak(saluto() + '. Online Planning è pronto a consultare il calendario.', true); };
 $('voiceToggle').onclick = () => {
   voiceOn = !voiceOn;
   store.set('ronda_voice', voiceOn ? 'on' : 'off');
@@ -1187,7 +1191,12 @@ async function connect(c, refresh, greet, remember) {
     if (greet) {
       const t = greeting();
       addAnswer(t);
-      if (unlocked) speak(t); else pendingGreet = t;
+      if (unlocked) speak(t);
+      else {
+        // nessun tocco ancora: il saluto parte al primo tocco
+        pendingGreet = t;
+        document.addEventListener('click', () => { if (pendingGreet) { speak(pendingGreet); pendingGreet = null; } }, { once: true });
+      }
       $('bootSub').textContent = 'Sistemi pronti';
     }
   } catch (err) {
@@ -1226,7 +1235,7 @@ $('bootBtn').onclick = () => {
   if (pendingGreet) { speak(pendingGreet); pendingGreet = null; }
 };
 
-const login = () => connect($('codeIn').value.trim(), true, true, $('remember').checked);
+const login = () => { unlockVoice(); connect($('codeIn').value.trim(), true, true, $('remember').checked); };
 $('enter').onclick = login;
 $('codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 $('logoutBtn').onclick = () => {
