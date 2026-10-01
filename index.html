@@ -14,7 +14,8 @@
 :root{
   --abyss:#06121F; --hull:#0B2033; --holo:#6FE3FF; --ember:#FFB547; --signal:#FF6B7D;
   --text:#D8F6FF; --muted:#86AEC4; --line:rgba(111,227,255,.24); --grid:rgba(111,227,255,.045);
-  --state:var(--holo);
+  --core:#FF9A3C; --core-think:#FFD27A; /* nucleo e rete neurale */
+  --state:var(--core);
   --display:"Chakra Petch","Segoe UI",system-ui,sans-serif;
   --body:Barlow,"Segoe UI",system-ui,sans-serif;
   box-sizing:border-box;
@@ -26,13 +27,13 @@ html,body{height:100%;margin:0}
 body{
   background-color:var(--abyss);color:var(--text);font:16px/1.5 var(--body);
   background-image:
-    radial-gradient(ellipse 70% 50% at 50% 32%,rgba(43,168,214,.18),transparent 70%),
+    radial-gradient(ellipse 70% 50% at 50% 32%,rgba(255,140,50,.13),transparent 70%),
     linear-gradient(var(--grid) 1px,transparent 1px),
     linear-gradient(90deg,var(--grid) 1px,transparent 1px);
   background-size:100% 100%,28px 28px,28px 28px;
   -webkit-tap-highlight-color:transparent;
 }
-body[data-state="thinking"]{--state:var(--ember)}
+body[data-state="thinking"]{--state:var(--core-think)}
 body[data-state="error"]{--state:var(--signal)}
 button,input{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--holo);outline-offset:3px}
@@ -97,7 +98,7 @@ body[data-state="listening"] .pulse,body[data-state="speaking"] .pulse{animation
 .tag.warn{border-color:var(--ember);color:var(--ember)}
 
 .dock{display:grid;gap:8px}
-.build{font-family:var(--display);font-size:.7rem;letter-spacing:.06em;color:var(--muted);opacity:.75;margin-top:-2px;user-select:all}
+.build{font-family:var(--display);font-size:.7rem;letter-spacing:.06em;color:var(--muted);opacity:.75;margin-top:-2px;user-select:all;text-align:right}
 .chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
 .chips::-webkit-scrollbar{display:none}
 .chip{flex:none;background:rgba(111,227,255,.06);border:1px solid var(--line);border-radius:999px;padding:6px 13px;font-size:.88rem;cursor:pointer}
@@ -1132,7 +1133,7 @@ $('reloadBtn').onclick = () => { if (code) connect(code, true); };
 /* ======================= Rete neurale di sfondo ======================= */
 (function neuralNet() {
   const cv = $('net'), ctx = cv.getContext('2d');
-  const COLORS = { idle: '111,227,255', listening: '111,227,255', speaking: '111,227,255', thinking: '255,181,71', error: '255,107,125' };
+  const COLORS = { idle: '255,154,60', listening: '255,154,60', speaking: '255,154,60', thinking: '255,210,122', error: '255,107,125' };
   let W = 0, H = 0, nodes = [], signals = [];
 
   function resize() {
