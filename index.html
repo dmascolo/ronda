@@ -355,7 +355,7 @@ function voiceText(t) {
   return t;
 }
 
-/* Pre-agonistica: le notifiche riguardano solo queste categorie.
+/* Pre-agonistica: le conferme riguardano solo queste categorie, e solo per le partite in casa.
    Se in config.js c'è window.RONDA_PREAGONISTICA (elenco dei nomi come nel foglio) si usa quello;
    altrimenti si riconosce dal nome: Esordienti/Pulcini/Primi calci/Piccoli amici, U13 o inferiori,
    oppure annate di nascita da U13 in giù nella stagione in corso. */
@@ -478,8 +478,8 @@ function parse(q) {
   if (/fuori casa|trasfert|\bfuori\b/.test(n)) f.home = false;
   else if (/\bcasa\b/.test(n)) f.home = true;
 
-  if (/non (ancora )?(notificat|avvisat|comunicat)|da notificare|senza notifica/.test(n)) f.notif = false;
-  else if (/\bnotificat/.test(n)) f.notif = true;
+  if (/non (ancora )?(notificat|avvisat|comunicat|confermat)|da (notificare|confermare)|senza (notifica|conferma)/.test(n)) f.notif = false;
+  else if (/\bnotificat|\bconfermat/.test(n)) f.notif = true;
 
   f.win = parseWindow(n);
 
@@ -557,8 +557,8 @@ function describe(f) {
   if (f.opps.length) p.push('contro ' + joinIt(f.opps));
   if (f.home === true) p.push('in casa');
   if (f.home === false) p.push('in trasferta');
-  if (f.notif === false) p.push('di pre-agonistica non ancora notificate');
-  if (f.notif === true) p.push('di pre-agonistica già notificate');
+  if (f.notif === false) p.push('di pre-agonistica non ancora confermate');
+  if (f.notif === true) p.push('di pre-agonistica già confermate');
   if (f.win) p.push(f.win.label);
   return p.join(' ');
 }
@@ -601,8 +601,8 @@ function answer(f) {
   if (f.notif !== null) {
     const base = describe(Object.assign({}, f, { notif: null, win: null }));
     const where = (base ? ' ' + base : '') + (f.win ? ' ' + f.win.label : '');
-    if (!n) return { text: 'Nessuna partita di pre-agonistica ' + (f.notif === false ? 'da notificare' : 'già notificata') + where + '.', list: [], played: [] };
-    const what = f.notif === false ? 'da notificare' : (n === 1 ? 'già notificata' : 'già notificate');
+    if (!n) return { text: 'Nessuna partita di pre-agonistica ' + (f.notif === false ? 'da confermare' : 'già confermata') + where + '.', list: [], played: [] };
+    const what = f.notif === false ? 'da confermare' : (n === 1 ? 'già confermata' : 'già confermate');
     return { text: (n === 1 ? 'C\'è una partita di pre-agonistica ' + what + where + ': ' : 'Ci sono ' + n + ' partite di pre-agonistica ' + what + where + '. ') + (n === 1 ? det.charAt(0).toLowerCase() + det.slice(1) : det) + rest, list: list, played: [] };
   }
   const note = !pl ? '' : (pl === 1 ? ' Segnalo anche una partita già giocata' : ' Segnalo anche ' + pl + ' partite già giocate') + (f.win ? ' in questo periodo' : '') + '.';
@@ -623,7 +623,7 @@ const pick = a => a[Math.floor(Math.random() * a.length)];
 function helpText() {
   const c = cats[0] || 'U17';
   return 'Sono a disposizione. Posso cercare le partite per categoria, avversario, giorno o periodo, in casa o in trasferta. ' +
-    'Prova con "prossima partita ' + c + '", "trasferte di ottobre" o "partite non ancora notificate".';
+    'Prova con "prossima partita ' + c + '", "trasferte di ottobre" o "partite non ancora confermate".';
 }
 
 /* ======================= Server ======================= */
@@ -725,7 +725,7 @@ function rowsEl(list) {
     if (m.notif === false) {
       const tag = document.createElement('span');
       tag.className = 'tag warn';
-      tag.textContent = 'da notificare';
+      tag.textContent = 'da confermare';
       what.appendChild(tag);
     }
     row.append(when, what);
@@ -1097,7 +1097,7 @@ $('q').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefa
 $('chips').addEventListener('click', e => { if (e.target.classList.contains('chip')) send(e.target.textContent); });
 
 function renderChips() {
-  const list = ['Prossima partita', 'Partite di questo weekend', 'Trasferte di questo mese', 'Partite non ancora notificate'];
+  const list = ['Prossima partita', 'Partite di questo weekend', 'Trasferte di questo mese', 'Partite non ancora confermate'];
   if (cats.length) list.splice(1, 0, 'Prossima partita ' + cats[0]);
   $('chips').replaceChildren(...list.map(t => {
     const b = document.createElement('button');
@@ -1109,7 +1109,7 @@ function renderChips() {
 
 function renderDiag(diag, cdiag) {
   const labels = { data: 'data', ora: 'ora', categoria: 'categoria', avversario: 'avversario', casaTrasferta: 'casa/trasferta',
-    squadraCasa: 'squadra di casa', squadraOspite: 'squadra ospite', luogo: 'luogo', notificato: 'notificato' };
+    squadraCasa: 'squadra di casa', squadraOspite: 'squadra ospite', luogo: 'luogo', notificato: 'confermato' };
   $('diag').replaceChildren(...(diag.length ? diag : [null]).map(s => {
     const p = document.createElement('div');
     p.textContent = s
@@ -1143,7 +1143,7 @@ async function connect(c, refresh, greet, remember) {
     $('gate').hidden = true;
     matches = (res.matches || []).map(m => {
       m.pre = isPre(m.cat);
-      if (!m.pre) m.notif = null; // le notifiche valgono solo per la pre-agonistica
+      if (!m.pre || m.home === false) m.notif = null; // da confermare: solo pre-agonistica in casa
       return m;
     });
     contacts = (res.contacts || [])
