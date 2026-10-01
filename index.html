@@ -316,6 +316,42 @@ const STOP = new Set(['calcio','asd','ssd','usd','polisportiva','sportiva','spor
   'juniores','squadra','partita','partite','casa','trasferta','prossima','prossimo','contro','quando','giochiamo']
   .concat(GIORNI, MESI));
 
+/* Sinonimi delle categorie: nome come scritto nel Gestionale → modi in cui può essere chiesto.
+   "voce" è come RONDA lo pronuncia. Si possono aggiungere o modificare in config.js (window.RONDA_ALIASES). */
+const DEFAULT_ALIASES = {
+  '1a SQ.': { voce: 'prima squadra', alias: ['prima squadra', 'seconda categoria'] },
+  'U17 - 2010': { voce: 'under 17', alias: ['U17', 'under 17', '2010', 'allievi A'] }
+};
+const ALIASES = (() => {
+  const src = Object.assign({}, DEFAULT_ALIASES, window.RONDA_ALIASES || {});
+  return Object.keys(src).map(cat => {
+    const v = src[cat];
+    const raw = (Array.isArray(v) ? v : (v && v.alias) || []).map(String);
+    const voce = (v && !Array.isArray(v) && v.voce) || '';
+    return { cat: cat, voce: voce, raw: raw, alias: raw.map(norm).filter(String) };
+  });
+})();
+
+// Categorie citate tramite sinonimo, riportate al nome reale presente nel foglio
+function aliasCats(padded) {
+  const out = [];
+  ALIASES.forEach(e => {
+    if (e.alias.some(a => padded.includes(' ' + a + ' '))) {
+      resolveNames([e.cat], cats).forEach(c => { if (!out.includes(c)) out.push(c); });
+    }
+  });
+  return out;
+}
+const aliasToCat = v => (ALIASES.find(e => e.alias.includes(norm(v)) || norm(e.cat) === norm(v)) || { cat: v }).cat;
+
+// Per la voce: "1a SQ." si legge "prima squadra", "U17 - 2010" si legge "under 17"
+function voiceText(t) {
+  ALIASES.filter(e => e.voce).sort((a, b) => b.cat.length - a.cat.length).forEach(e => {
+    t = t.split(e.cat).join(e.voce);
+  });
+  return t;
+}
+
 const CAT_STOP = new Set(['categoria','categorie','squadra','prima','seconda','terza','gruppo','team','under','anni','annata','classe','leva','nati']);
 
 function buildIndex() {
@@ -398,7 +434,8 @@ function parse(q) {
   const f = { cats: [], opps: [], home: null, notif: null, win: null, mode: null, count: false, focus: null };
 
   const qc = compact(q);
-  catKeys.forEach(x => { if (qc.includes(x.k) && !f.cats.some(c => compact(c).includes(x.k))) f.cats.push(x.c); });
+  f.cats = aliasCats(padded);
+  if (!f.cats.length) catKeys.forEach(x => { if (qc.includes(x.k) && !f.cats.some(c => compact(c).includes(x.k))) f.cats.push(x.c); });
   if (!f.cats.length) words.forEach(w => (catToks[w] || []).forEach(c => { if (!f.cats.includes(c)) f.cats.push(c); }));
 
   // La domanda cita una categoria (anno di nascita, sigla U…) che non esiste nel foglio?
@@ -705,7 +742,7 @@ document.addEventListener('pointerdown', unlockVoice, { once: true });
 function speak(text, force) {
   if (!tts || !(voiceOn || force)) return false;
   tts.cancel();
-  const u = new SpeechSynthesisUtterance(text);
+  const u = new SpeechSynthesisUtterance(voiceText(text));
   u.lang = 'it-IT';
   if (itVoice) u.voice = itVoice;
   u.rate = 0.95;   // ritmo pacato
@@ -931,7 +968,7 @@ function resolveNames(values, list) {
 function toFilter(r, localF) {
   const oppNames = opps.map(o => o.o);
   const arr = v => (Array.isArray(v) ? v : []).map(String);
-  const aiCats = resolveNames(arr(r.cats), cats);
+  const aiCats = resolveNames(arr(r.cats).map(aliasToCat), cats);
   const aiOpps = resolveNames(arr(r.opps), oppNames);
   const f = {
     cats: aiCats.length ? aiCats : (localF ? localF.cats : []),
@@ -963,6 +1000,7 @@ async function aiAnswer(text, localF) {
     const t = today0();
     const res = await call('parse', { code: code, question: text, ctx: {
       cats: cats, opps: opps.map(o => o.o),
+      aliases: ALIASES.reduce((o, e) => { o[e.cat] = e.raw; return o; }, {}),
       today: iso(t) + ' (' + GIORNI_TXT[t.getDay()] + ')', last: slimF(lastF)
     } });
     if (!res || !res.ok) throw new Error((res && res.error) || 'Nessuna risposta.');
