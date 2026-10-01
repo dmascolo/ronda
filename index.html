@@ -110,12 +110,26 @@ body[data-state="listening"] .mic{background:var(--holo);color:var(--abyss)}
 .send{flex:none;border:0;border-radius:10px;background:var(--holo);color:var(--abyss);font-family:var(--display);font-weight:600;padding:9px 16px;cursor:pointer}
 .send:disabled{opacity:.4;cursor:default}
 
+.boot{position:fixed;inset:0;z-index:9;display:grid;place-items:center;background:rgba(6,18,31,.9)}
+.boot-btn{background:none;border:0;cursor:pointer;display:grid;gap:10px;justify-items:center;padding:40px;color:var(--text)}
+.boot-btn .mark{font-size:2rem}
+.boot-sub{color:var(--muted);font-size:.95rem}
+.boot-tap{font-family:var(--display);color:var(--holo);border:1px solid var(--holo);border-radius:999px;padding:8px 20px;margin-top:8px;animation:breathe 2s ease-in-out infinite}
+@keyframes breathe{50%{opacity:.45}}
+.contact{padding:8px 0;border-top:1px solid var(--line);font-size:.92rem;white-space:normal}
+.contact b{font-family:var(--display);font-weight:500;color:var(--holo);display:block;margin-bottom:2px}
+.contact div{display:flex;gap:8px;flex-wrap:wrap}
+.contact span{color:var(--muted);min-width:6.5em}
+.contact a{color:var(--text);text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
 .gate{position:fixed;inset:0;display:grid;place-items:center;padding:24px;background:rgba(6,18,31,.95);z-index:10}
 .gate-box{width:min(100%,360px);display:grid;gap:14px;text-align:center}
 .gate-box h1{font-family:var(--display);font-weight:600;letter-spacing:.32em;color:var(--holo);margin:0;font-size:1.6rem}
 .gate-box p{margin:0;color:var(--muted)}
 .gate-box input{background:var(--hull);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center;font-size:18px;letter-spacing:.15em;outline:0}
 .gate-box input:focus{border-color:var(--holo)}
+.remember{display:flex;align-items:center;justify-content:center;gap:8px;font-size:.88rem;color:var(--muted);cursor:pointer}
+.remember input{width:18px;height:18px;accent-color:var(--holo);margin:0}
+.panel-sep{border:0;border-top:1px solid var(--line);margin:2px 0}
 .gate-err{color:var(--signal);min-height:1.5em}
 
 @media (max-width:420px){ .link span:last-child{display:none} }
@@ -124,7 +138,7 @@ body[data-state="listening"] .mic{background:var(--holo);color:var(--abyss)}
   .core{width:min(34vw,380px)}
   .log{height:100%;padding-top:24px}
 }
-@media (prefers-reduced-motion:reduce){ .spin,.pulse{animation:none!important} }
+@media (prefers-reduced-motion:reduce){ .spin,.pulse,.boot-tap{animation:none!important} }
 </style>
 </head>
 <body data-state="idle">
@@ -153,6 +167,8 @@ body[data-state="listening"] .mic{background:var(--holo);color:var(--abyss)}
         <button class="pill" id="voiceToggle" aria-pressed="true">Voce attiva</button>
         <button class="pill" id="voiceTest">Prova</button>
       </div>
+      <hr class="panel-sep">
+      <button class="pill" id="logoutBtn">Esci e richiedi il codice</button>
       <p class="hint">Le voci sono quelle installate sul dispositivo. Su iPhone puoi scaricare le versioni "Avanzata" o "Premium" in Impostazioni → Accessibilità → Contenuti letti → Voci.</p>
     </div>
   </header>
@@ -202,11 +218,20 @@ body[data-state="listening"] .mic{background:var(--holo);color:var(--abyss)}
   </footer>
 </div>
 
+<section class="boot" id="boot" hidden>
+  <button class="boot-btn" id="bootBtn">
+    <span class="mark">RONDA</span>
+    <span class="boot-sub" id="bootSub">Avvio dei sistemi…</span>
+    <span class="boot-tap">Tocca per iniziare</span>
+  </button>
+</section>
+
 <section class="gate" id="gate" hidden>
   <div class="gate-box">
     <h1>RONDA</h1>
     <p>Inserisci il codice d'accesso del Gestionale Incontri.</p>
     <input id="codeIn" type="password" autocomplete="off" aria-label="Codice d'accesso">
+    <label class="remember"><input type="checkbox" id="remember"> Ricorda il codice su questo dispositivo</label>
     <button class="send" id="enter">Entra</button>
     <div class="gate-err" id="gateErr" aria-live="polite"></div>
   </div>
@@ -228,9 +253,21 @@ const store = {
   del: k => { try { localStorage.removeItem(k); } catch (e) {} }
 };
 
-let code = store.get('ronda_code') || '';
+const session = {
+  get: k => { try { return sessionStorage.getItem(k); } catch (e) { return null; } },
+  set: (k, v) => { try { sessionStorage.setItem(k, v); } catch (e) {} },
+  del: k => { try { sessionStorage.removeItem(k); } catch (e) {} }
+};
+store.del('ronda_code'); // vecchia chiave: dopo l'aggiornamento il codice viene richiesto di nuovo
+let code = store.get('ronda_code_v2') || session.get('ronda_code_v2') || '';
+function saveCode(c, remember) {
+  if (remember) { store.set('ronda_code_v2', c); session.del('ronda_code_v2'); }
+  else { session.set('ronda_code_v2', c); store.del('ronda_code_v2'); }
+}
+function forgetCode() { store.del('ronda_code_v2'); session.del('ronda_code_v2'); code = ''; }
 let matches = [], cats = [], catKeys = [], catToks = {}, opps = [];
 let lastF = null, lastList = [];
+let contacts = [], pendingGreet = null;
 let state = 'idle', busy = false;
 let micBlocked = !SR;
 let voiceOn = store.get('ronda_voice') !== 'off' && !!tts;
@@ -283,7 +320,7 @@ function buildIndex() {
   cats.forEach(c => norm(c).split(' ').forEach(t => {
     if (t.length >= 3 && !CAT_STOP.has(t)) (catToks[t] = catToks[t] || []).includes(c) || catToks[t].push(c);
   }));
-  opps = [...new Set(matches.map(m => m.opp).filter(Boolean))].map(o => ({
+  opps = [...new Set(matches.map(m => m.opp).concat(contacts.map(c => c.team)).filter(Boolean))].map(o => ({
     o: o, full: norm(o),
     toks: norm(o).split(' ').filter(t => t.length >= 4 && !STOP.has(t) && !/^\d+$/.test(t))
   }));
@@ -385,7 +422,12 @@ function parse(q) {
   if (/\bdove\b|indirizz|\bcampo\b/.test(n)) f.focus = 'dove';
   else if (/\bora\b|orario|a che ora/.test(n)) f.focus = 'ora';
 
-  f.any = !!(f.cats.length || f.opps.length || f.home !== null || f.notif !== null || f.win || f.mode || f.count ||
+  if (/contatt|telefon|cellular|chiamar|\be ?-?mail\b|\bmail\b|posta elettronica|referent|responsabil|recapit|whatsapp|\bnumer[oi]\b(?! di partit)/.test(n)) {
+    f.contact = true;
+    f.contactField = /telefon|numer|cellular|chiamar|whatsapp/.test(n) ? 'tel' : /mail/.test(n) ? 'mail' : /referent|responsabil|\bchi\b/.test(n) ? 'ref' : null;
+  }
+
+  f.any = !!(f.contact || f.cats.length || f.opps.length || f.home !== null || f.notif !== null || f.win || f.mode || f.count ||
     /partit|gioc|\bgar[ae]\b|incontr|calendar|impegn/.test(n));
 
   // Domande di seguito: "e l'U15?", "e in trasferta?"
@@ -400,6 +442,7 @@ function parse(q) {
     merged.count = f.count || merged.count;
     merged.focus = f.focus;
     merged.catMiss = f.catMiss;
+    if (f.contact) { merged.contact = true; merged.contactField = f.contactField; }
     merged.any = true;
     return merged;
   }
@@ -543,12 +586,13 @@ function addMsg(kind, text) {
   return el;
 }
 
-function addAnswer(text, list) {
+function addAnswer(text, list, contactList) {
   const el = addMsg('ronda', '');
   const body = document.createElement('div');
   el.appendChild(body);
   const done = () => {
     if (list && list.length > 1) el.appendChild(rowsEl(list));
+    if (contactList && contactList.length) el.appendChild(contactsEl(contactList));
     scrollLog();
   };
   if (reduce) { body.textContent = text; return done(); }
@@ -743,7 +787,83 @@ $('mic').onclick = $('core').onclick;
 if (!SR) $('mic').hidden = true;
 
 /* ======================= Domande ======================= */
+/* ======================= Contatti (sola lettura) ======================= */
+function findContact(name) {
+  const k = compact(name);
+  return contacts.find(c => compact(c.team) === k)
+    || contacts.find(c => compact(c.team).includes(k) || k.includes(compact(c.team)))
+    || null;
+}
+const isPhone = fl => /tel|cell|numer|whatsapp/i.test(fl.label) || /^\+?[\d\s\-\/.]{7,}$/.test(fl.value);
+const isMail = fl => /mail/i.test(fl.label) || /@/.test(fl.value);
+
+// Per la voce: i numeri cifra per cifra, le email leggibili
+function sayValue(fl) {
+  if (isMail(fl)) return fl.value.replace(/@/g, ' chiocciola ').replace(/\./g, ' punto ');
+  if (isPhone(fl)) {
+    let groups = fl.value.replace(/^\s*(\+|00)39/, '').split(/\D+/).filter(String);
+    if (groups.length === 1 && groups[0].length > 6) groups = groups[0].match(/^(\d{3})(\d{3})(\d+)$/).slice(1);
+    return groups.map(g => g.split('').join(' ')).join(', ');
+  }
+  return fl.value;
+}
+
+function contactAnswer(f) {
+  let teams = f.opps.length ? f.opps : [...new Set(lastList.map(m => m.opp).filter(Boolean))];
+  if (!teams.length) return { text: 'Di quale squadra ti servono i contatti?', list: [] };
+  if (!contacts.length) return { text: 'Nel gestionale non ho trovato un foglio con i contatti delle squadre.', list: [] };
+  const found = [];
+  teams.forEach(t => { const c = findContact(t); if (c && !found.includes(c)) found.push(c); });
+  if (!found.length) return { text: 'Non risultano contatti per ' + joinIt(teams) + '.', list: [] };
+
+  const pickFields = c => {
+    const sel = f.contactField === 'tel' ? c.fields.filter(isPhone)
+      : f.contactField === 'mail' ? c.fields.filter(isMail)
+      : f.contactField === 'ref' ? c.fields.filter(fl => !isPhone(fl) && !isMail(fl) && /referent|responsab|dirigent|contatt|nome/i.test(fl.label))
+      : c.fields;
+    return sel.length ? sel : c.fields;
+  };
+  const shown = found.slice(0, 3);
+  const line = (c, say) => c.team + ': ' + pickFields(c).map(fl => fl.label.toLowerCase() + ' ' + (say ? sayValue(fl) : fl.value)).join(', ') + '.';
+  const extra = found.length > 3 ? ' Gli altri contatti sono qui sotto.' : '';
+  lastF = f;
+  return {
+    text: shown.map(c => line(c, false)).join(' ') + extra,
+    say: shown.slice(0, 2).map(c => line(c, true)).join(' ') + (found.length > 2 ? ' Gli altri sono a schermo.' : ''),
+    list: [], contacts: found
+  };
+}
+
+function contactsEl(list) {
+  const wrap = document.createElement('div');
+  wrap.className = 'rows';
+  list.slice(0, 10).forEach(c => {
+    const box = document.createElement('div');
+    box.className = 'contact';
+    const b = document.createElement('b');
+    b.textContent = c.team;
+    box.appendChild(b);
+    c.fields.forEach(fl => {
+      const row = document.createElement('div');
+      const lab = document.createElement('span');
+      lab.textContent = fl.label;
+      let val;
+      if (isPhone(fl) || isMail(fl)) {
+        val = document.createElement('a');
+        val.href = isMail(fl) ? 'mailto:' + fl.value : 'tel:' + fl.value.replace(/[^\d+]/g, '');
+      } else val = document.createElement('em');
+      val.textContent = fl.value;
+      val.style.fontStyle = 'normal';
+      row.append(lab, val);
+      box.appendChild(row);
+    });
+    wrap.appendChild(box);
+  });
+  return wrap;
+}
+
 function localAnswer(f, text) {
+  if (f.contact) return contactAnswer(f);
   if (!f.any && lastList.length && (f.focus || /\bchi\b/.test(norm(text)))) {
     const ff = Object.assign({}, lastF, { focus: f.focus });
     return { text: lastList.slice(0, 3).map(m => sentence(m, ff)).join(' '), list: lastList };
@@ -794,6 +914,8 @@ function toFilter(r, localF) {
     mode: r.mode === 'next' || r.mode === 'last' ? r.mode : null,
     count: !!r.count,
     focus: r.focus === 'dove' || r.focus === 'ora' ? r.focus : null,
+    contact: !!r.contact || !!(localF && localF.contact),
+    contactField: localF ? localF.contactField : null,
     any: true
   };
   // Categoria citata ma non trovata: meglio dirlo che mostrare tutte le partite
@@ -819,6 +941,7 @@ async function aiAnswer(text, localF) {
     const r = res.filter || {};
     if (!r.understood) return { text: r.reply || helpText(), list: [] };
     const f = toFilter(r, localF);
+    if (f.contact) return contactAnswer(f);
     if (f.catMiss) {
       return { text: 'Non trovo la categoria ' + f.catMiss + ' nel foglio. Le categorie disponibili sono: ' + joinIt(cats) + '.', list: [] };
     }
@@ -858,8 +981,8 @@ async function send(text) {
         if (alt && (out.unknown || alt.list.length)) out = alt;
       }
     }
-    const talking = speak(out.text);
-    addAnswer(out.text, out.list);
+    const talking = speak(out.say || out.text);
+    addAnswer(out.text, out.list, out.contacts);
     if (!talking) setState('idle');
   } finally {
     busy = false;
@@ -881,7 +1004,7 @@ function renderChips() {
   }));
 }
 
-function renderDiag(diag) {
+function renderDiag(diag, cdiag) {
   const labels = { data: 'data', ora: 'ora', categoria: 'categoria', avversario: 'avversario', casaTrasferta: 'casa/trasferta',
     squadraCasa: 'squadra di casa', squadraOspite: 'squadra ospite', luogo: 'luogo', notificato: 'notificato' };
   $('diag').replaceChildren(...(diag.length ? diag : [null]).map(s => {
@@ -890,17 +1013,22 @@ function renderDiag(diag) {
       ? s.sheet + ': ' + Object.keys(s.columns).map(k => labels[k] + ' = "' + s.columns[k] + '"').join(', ')
       : 'Nessun foglio con una colonna "Data" trovato.';
     return p;
+  }), ...(cdiag || []).map(s => {
+    const p = document.createElement('div');
+    p.textContent = 'Contatti, ' + s.sheet + ': ' + s.count + ' squadre (nome = "' + s.team + '"; campi: ' + s.fields.join(', ') + ')';
+    return p;
   }));
 }
 
 /* ======================= Accesso e caricamento ======================= */
 function showGate(msg) {
+  $('boot').hidden = true;
   $('gate').hidden = false;
   $('gateErr').textContent = msg || '';
   setTimeout(() => $('codeIn').focus(), 50);
 }
 
-async function connect(c, refresh, greet) {
+async function connect(c, refresh, greet, remember) {
   $('enter').disabled = true;
   $('gateErr').textContent = '';
   setState('thinking');
@@ -908,33 +1036,68 @@ async function connect(c, refresh, greet) {
     const res = await call('load', { code: c, refresh: !!refresh });
     if (!res || !res.ok) throw new Error((res && res.error) || 'Impossibile collegarsi.');
     code = c;
-    store.set('ronda_code', c);
+    if (remember !== undefined) saveCode(c, remember);
     $('gate').hidden = true;
     matches = res.matches || [];
+    contacts = res.contacts || [];
     aiAvailable = !!res.ai;
     renderMode();
     buildIndex();
     renderChips();
-    renderDiag(res.diag || []);
+    renderDiag(res.diag || [], res.contactsDiag || []);
     $('link').classList.add('on');
     $('linkText').textContent = matches.length + ' partite';
     setState('idle');
     if (greet) {
-      const t = saluto() + '. Collegamento stabilito: ' + matches.length + ' partite in archivio.';
+      const t = greeting();
       addAnswer(t);
-      if (unlocked) speak(t);
+      if (unlocked) speak(t); else pendingGreet = t;
+      $('bootSub').textContent = 'Sistemi pronti';
     }
   } catch (err) {
     const msg = (err && err.message) || String(err);
-    if (/codice d'accesso|ACCESS_CODE/i.test(msg) || !code) { store.del('ronda_code'); showGate(msg); setState('idle'); }
+    if (/codice d'accesso|ACCESS_CODE/i.test(msg) || !code) { forgetCode(); showGate(msg); setState('idle'); }
     else { addMsg('error', msg); setState('error'); }
   } finally {
     $('enter').disabled = false;
   }
 }
 
-$('enter').onclick = () => connect($('codeIn').value.trim(), true, true);
-$('codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') connect($('codeIn').value.trim(), true, true); });
+// Saluto d'avvio: riepilogo dell'archivio e della giornata
+function greeting() {
+  let t = saluto() + '. Collegamento stabilito: ' + (matches.length === 1 ? 'una partita' : matches.length + ' partite') + ' in archivio';
+  if (contacts.length) t += ' e i contatti di ' + contacts.length + ' squadre';
+  t += '.';
+  const today = iso(today0());
+  const oggi = matches.filter(m => m.d === today);
+  if (oggi.length === 1) t += ' Oggi si gioca una partita: ' + oggi[0].cat + ' contro ' + (oggi[0].opp || 'avversario da definire') + (oggi[0].t ? ' alle ' + oggi[0].t : '') + '.';
+  else if (oggi.length > 1) t += ' Oggi si giocano ' + oggi.length + ' partite.';
+  else {
+    const next = matches.find(m => m.d > today);
+    if (next) t += ' Il prossimo impegno è ' + dayText(next.d) + '.';
+  }
+  return t;
+}
+
+// I browser permettono di parlare solo dopo un tocco: la schermata d'avvio serve a questo
+function showBoot() {
+  if (!tts || !voiceOn) return;
+  $('boot').hidden = false;
+}
+$('bootBtn').onclick = () => {
+  unlockVoice();
+  $('boot').hidden = true;
+  if (pendingGreet) { speak(pendingGreet); pendingGreet = null; }
+};
+
+const login = () => connect($('codeIn').value.trim(), true, true, $('remember').checked);
+$('enter').onclick = login;
+$('codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+$('logoutBtn').onclick = () => {
+  forgetCode();
+  if (tts) tts.cancel();
+  location.reload();
+};
 $('reloadBtn').onclick = () => { if (code) connect(code, true); };
 
 /* ======================= Rete neurale di sfondo ======================= */
@@ -1045,7 +1208,7 @@ renderVoiceBtn();
 renderMode();
 renderChips();
 setState('idle');
-code ? connect(code, true, true) : showGate();
+if (code) { showBoot(); connect(code, true, true); } else showGate();
 </script>
 </body>
 </html>
