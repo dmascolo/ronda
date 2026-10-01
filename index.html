@@ -247,7 +247,10 @@ body[data-state="listening"] .mic{background:var(--holo);color:var(--abyss)}
 </section>
 
 <!-- Su GitHub Pages l'URL dello script sta in config.js: così index.html si può sostituire senza modificarlo -->
-<script src="config.js"></script>
+<script>
+  // config.js viene riletto a ogni apertura o refresh: il parametro "t" impedisce al browser di usare una copia vecchia
+  document.write('<script src="config.js?t=' + Date.now() + '"><\/script>');
+</script>
 <script>
 const ENDPOINT = (window.RONDA_ENDPOINT || '').trim();
 const BUILD = String(window.RONDA_BUILD || '').trim();
@@ -352,11 +355,31 @@ function voiceText(t) {
   ALIASES.filter(e => e.voce).sort((a, b) => b.cat.length - a.cat.length).forEach(e => {
     t = t.split(e.cat).join(e.voce);
   });
-  // Categorie scritte in forma compatta ("U9 - 2018A") che la sintesi vocale legge male
+  // Categorie scritte in forma compatta ("U9 - 2018A"): le riscrivo a parole, così la sintesi vocale
+  // non può interpretarle a modo suo (date, sottrazioni, codici…)
   return t
-    .replace(/\bU\s?(\d{1,2})\s*-\s*((?:19|20)\d{2})\s*([A-Z])?\b/g, (m, u, y, l) => 'under ' + u + ', annata ' + y + (l ? ' ' + l : ''))
-    .replace(/\bU(\d{1,2})\b/g, 'under $1')
-    .replace(/\b((?:19|20)\d{2})([A-Z])\b/g, '$1 $2');
+    .replace(/\b[Uu]\s?(\d{1,2})\s*[-–—]\s*((?:19|20)\d{2})\s*([A-Za-z])?\b/g,
+      (m, u, y, l) => 'under ' + numIt(+u) + ', annata ' + numIt(+y) + (l ? ' ' + l.toUpperCase() : ''))
+    .replace(/\b[Uu](\d{1,2})\b/g, (m, u) => 'under ' + numIt(+u))
+    .replace(/\b((?:19|20)\d{2})([A-Za-z])\b/g, (m, y, l) => numIt(+y) + ' ' + l.toUpperCase());
+}
+
+// Numeri in lettere (0–99 e anni 1900–2099)
+function numIt(n) {
+  const U = ['zero','uno','due','tre','quattro','cinque','sei','sette','otto','nove','dieci','undici','dodici',
+    'tredici','quattordici','quindici','sedici','diciassette','diciotto','diciannove'];
+  const T = ['', '', 'venti', 'trenta', 'quaranta', 'cinquanta', 'sessanta', 'settanta', 'ottanta', 'novanta'];
+  const lt100 = x => {
+    if (x < 20) return U[x];
+    const t = Math.floor(x / 10), u = x % 10;
+    let w = T[t];
+    if (u === 1 || u === 8) w = w.slice(0, -1);
+    return w + (u === 3 ? 'tré' : u ? U[u] : '');
+  };
+  if (n < 100) return lt100(n);
+  if (n >= 2000 && n < 2100) return 'duemila' + (n % 100 ? lt100(n % 100) : '');
+  if (n >= 1900 && n < 2000) return 'millenovecento' + (n % 100 ? lt100(n % 100) : '');
+  return String(n);
 }
 
 /* Pre-agonistica: le conferme riguardano solo queste categorie, e solo per le partite in casa.
