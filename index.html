@@ -117,6 +117,9 @@ body[data-state="listening"] .mic{background:var(--holo);color:var(--abyss)}
 .boot-sub{color:var(--muted);font-size:.95rem}
 .boot-tap{font-family:var(--display);color:var(--holo);border:1px solid var(--holo);border-radius:999px;padding:8px 20px;margin-top:8px;animation:breathe 2s ease-in-out infinite}
 @keyframes breathe{50%{opacity:.45}}
+.played{margin-top:10px;font-size:.88rem;color:var(--muted);white-space:normal}
+.played summary{cursor:pointer}
+.played .rows{opacity:.7}
 .contact{padding:8px 0;border-top:1px solid var(--line);font-size:.92rem;white-space:normal}
 .contact b{font-family:var(--display);font-weight:500;color:var(--holo);display:block;margin-bottom:2px}
 .contact div{display:flex;gap:8px;flex-wrap:wrap}
@@ -343,15 +346,15 @@ function parseWindow(n) {
   if (/weekend|week end|fine settimana|sabato e domenica/.test(n)) {
     let sat = t.getDay() === 0 ? addDays(t, -1) : addDays(t, 6 - t.getDay());
     if (/scors/.test(n)) return W(addDays(sat, -7), addDays(sat, -6), 'lo scorso weekend');
-    return W(sat < t ? t : sat, addDays(sat, 1), 'nel weekend');
+    return W(sat, addDays(sat, 1), 'nel weekend');
   }
   if (/prossima settimana|settimana prossima/.test(n)) return W(addDays(monday, 7), addDays(monday, 13), 'la prossima settimana');
   if (/settimana scorsa|scorsa settimana/.test(n)) return W(addDays(monday, -7), addDays(monday, -1), 'la settimana scorsa');
-  if (/\bsettimana\b/.test(n)) return W(t, addDays(monday, 6), 'questa settimana');
+  if (/\bsettimana\b/.test(n)) return W(monday, addDays(monday, 6), 'questa settimana');
   if (/prossimo mese|mese prossimo/.test(n)) {
     return W(new Date(t.getFullYear(), t.getMonth() + 1, 1), new Date(t.getFullYear(), t.getMonth() + 2, 0), 'il prossimo mese');
   }
-  if (/\bmese\b/.test(n)) return W(t, new Date(t.getFullYear(), t.getMonth() + 1, 0), 'questo mese');
+  if (/\bmese\b/.test(n)) return W(new Date(t.getFullYear(), t.getMonth(), 1), new Date(t.getFullYear(), t.getMonth() + 1, 0), 'questo mese');
 
   const mesiRe = MESI.join('|');
   let m = n.match(new RegExp('\\b(\\d{1,2}) (' + mesiRe + ')\\b'));
@@ -452,6 +455,8 @@ function parse(q) {
   return f;
 }
 
+// Restituisce le partite richieste. Le partite già giocate restano fuori dalla risposta,
+// salvo richiesta esplicita (ultima partita, ieri, settimana scorsa…): finiscono in "played" per segnalarle.
 function run(f) {
   const today = iso(today0());
   let list = matches.filter(m =>
@@ -459,22 +464,28 @@ function run(f) {
     (!f.opps.length || f.opps.includes(m.opp)) &&
     (f.home === null || m.home === f.home) &&
     (f.notif === null || m.notif === f.notif));
+  let played = [];
+  const askedPast = f.mode === 'last' || (f.win && f.win.to < today);
 
-  if (f.win) {
-    list = list.filter(m => m.d >= f.win.from && m.d <= f.win.to);
+  if (askedPast) {
+    list = (f.win ? list.filter(m => m.d >= f.win.from && m.d <= f.win.to) : list.filter(m => m.d < today));
     if (f.mode === 'last') list.reverse();
-  } else if (f.mode === 'last') {
-    list = list.filter(m => m.d < today).reverse();
+  } else if (f.win) {
+    const inWin = list.filter(m => m.d >= f.win.from && m.d <= f.win.to);
+    list = inWin.filter(m => m.d >= today);
+    played = inWin.filter(m => m.d < today);
   } else {
     const up = list.filter(m => m.d >= today);
-    list = (!up.length && f.opps.length) ? list.filter(m => m.d < today).reverse() : up;
+    if (!up.length) played = list.filter(m => m.d < today);
+    list = up;
   }
   if ((f.mode === 'next' || f.mode === 'last') && list.length) {
     const first = list[0].d;
     list = list.filter(m => m.d === first);
     if (f.mode === 'last') list.reverse();
   }
-  return list;
+  played = played.slice().reverse(); // dalla più recente
+  return { list: list, played: played };
 }
 
 /* ======================= Risposta ======================= */
@@ -503,31 +514,33 @@ function sentence(m, f) {
 }
 
 function answer(f) {
-  const today = iso(today0());
-  const list = run(f);
+  const r = run(f);
+  const list = r.list, played = r.played;
   const d = describe(f);
-  const past = list.length && list[0].d < today;
+  const pl = played.length;
+  const out = text => ({ text: text, list: list, played: played });
 
   if (!list.length) {
-    if (f.mode === 'last') return { text: 'Non risultano partite già giocate' + (d ? ' ' + d : '') + '.', list };
-    return { text: 'Non risultano partite' + (f.win ? '' : ' in programma') + (d ? ' ' + d : '') + '.', list };
+    if (f.mode === 'last') return out('Non risultano partite già giocate' + (d ? ' ' + d : '') + '.');
+    let t = 'Non risultano partite' + (f.win ? ' ancora da giocare' : ' in programma') + (d ? ' ' + d : '') + '.';
+    if (pl === 1) t += ' Ne risulta una già giocata, ' + dayText(played[0].d) + '.';
+    else if (pl > 1) t += ' Ne risultano ' + pl + ' già giocate, l\'ultima ' + dayText(played[0].d) + '.';
+    return out(t);
   }
   const n = list.length;
   const det = list.slice(0, 3).map(m => sentence(m, f)).join(' ');
   const rest = n === 4 ? ' L\'altra è nell\'elenco qui sotto.' : n > 4 ? ' Le altre ' + (n - 3) + ' sono nell\'elenco qui sotto.' : '';
+  const note = !pl ? '' : (pl === 1 ? ' Segnalo anche una partita già giocata' : ' Segnalo anche ' + pl + ' partite già giocate') + (f.win ? ' in questo periodo' : '') + '.';
 
   if (f.count) {
-    return { text: (n === 1 ? 'C\'è una partita' : 'Ci sono ' + n + ' partite') + (d ? ' ' + d : '') + '.' + (n <= 3 ? ' ' + det : ''), list };
+    return out((n === 1 ? 'C\'è una partita' : 'Ci sono ' + n + ' partite') + (f.win ? ' ancora da giocare' : '') + (d ? ' ' + d : '') + '.' + (n <= 3 ? ' ' + det : '') + note);
   }
-  if (n === 1) {
-    const intro = past && !f.win && f.mode !== 'last' ? 'Non risultano partite in programma. L\'ultima è stata: ' : pick(['', 'Certo. ', 'Ecco. ']);
-    return { text: intro + sentence(list[0], f), list };
-  }
+  if (n === 1) return out(pick(['', 'Certo. ', 'Ecco. ']) + sentence(list[0], f) + note);
   if (f.mode === 'next' || f.mode === 'last') {
     const verb = f.mode === 'next' ? 'Il prossimo impegno è' : 'L\'ultimo impegno è stato';
-    return { text: verb + ' ' + dayText(list[0].d) + ', con ' + n + ' partite. ' + det + rest, list };
+    return out(verb + ' ' + dayText(list[0].d) + ', con ' + n + ' partite. ' + det + rest);
   }
-  return { text: 'Risultano ' + n + ' partite' + (d ? ' ' + d : '') + '. ' + det + rest, list };
+  return out('Risultano ' + n + ' partite' + (f.win ? ' ancora da giocare' : '') + (d ? ' ' + d : '') + '. ' + det + rest + note);
 }
 
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -589,13 +602,21 @@ function addMsg(kind, text) {
   return el;
 }
 
-function addAnswer(text, list, contactList) {
+function addAnswer(text, list, contactList, played) {
   const el = addMsg('ronda', '');
   const body = document.createElement('div');
   el.appendChild(body);
   const done = () => {
     if (list && list.length > 1) el.appendChild(rowsEl(list));
     if (contactList && contactList.length) el.appendChild(contactsEl(contactList));
+    if (played && played.length) {
+      const det = document.createElement('details');
+      det.className = 'played';
+      const sum = document.createElement('summary');
+      sum.textContent = 'Già giocate (' + played.length + ')';
+      det.append(sum, rowsEl(played));
+      el.appendChild(det);
+    }
     scrollLog();
   };
   if (reduce) { body.textContent = text; return done(); }
@@ -791,6 +812,9 @@ if (!SR) $('mic').hidden = true;
 
 /* ======================= Domande ======================= */
 /* ======================= Contatti (sola lettura) ======================= */
+// Colonne tecniche (ID, chiavi, progressivi) da non mostrare né leggere
+const isIdField = fl => /^(id|uid|uuid|key|chiave|#|n|nr|n°|num|progressivo|riga)$/i.test(fl.label.trim()) || /\bid\b/i.test(fl.label);
+
 function findContact(name) {
   const k = compact(name);
   return contacts.find(c => compact(c.team) === k)
@@ -877,7 +901,7 @@ function localAnswer(f, text) {
   }
   const out = answer(f);
   lastF = f;
-  lastList = out.list;
+  lastList = out.list.length ? out.list : (out.played || []);
   return out;
 }
 
@@ -950,7 +974,7 @@ async function aiAnswer(text, localF) {
     }
     const out = answer(f);
     lastF = f;
-    lastList = out.list;
+    lastList = out.list.length ? out.list : (out.played || []);
     return out;
   } catch (err) {
     addMsg('error', 'AI non disponibile (' + ((err && err.message) || err) + '). Rispondo con la modalità base.');
@@ -985,7 +1009,7 @@ async function send(text) {
       }
     }
     const talking = speak(out.say || out.text);
-    addAnswer(out.text, out.list, out.contacts);
+    addAnswer(out.text, out.list, out.contacts, out.played);
     if (!talking) setState('idle');
   } finally {
     busy = false;
@@ -1042,7 +1066,9 @@ async function connect(c, refresh, greet, remember) {
     if (remember !== undefined) saveCode(c, remember);
     $('gate').hidden = true;
     matches = res.matches || [];
-    contacts = res.contacts || [];
+    contacts = (res.contacts || [])
+      .map(c => ({ team: c.team, fields: c.fields.filter(fl => !isIdField(fl)) }))
+      .filter(c => c.fields.length);
     aiAvailable = !!res.ai;
     renderMode();
     buildIndex();
