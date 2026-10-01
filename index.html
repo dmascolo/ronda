@@ -355,6 +355,27 @@ function voiceText(t) {
   return t;
 }
 
+/* Pre-agonistica: le notifiche riguardano solo queste categorie.
+   Se in config.js c'è window.RONDA_PREAGONISTICA (elenco dei nomi come nel foglio) si usa quello;
+   altrimenti si riconosce dal nome: Esordienti/Pulcini/Primi calci/Piccoli amici, U13 o inferiori,
+   oppure annate di nascita da U13 in giù nella stagione in corso. */
+function isPre(cat) {
+  const n = norm(cat);
+  if (Array.isArray(window.RONDA_PREAGONISTICA)) {
+    return window.RONDA_PREAGONISTICA.some(p => compact(p) === compact(cat));
+  }
+  if (/pre ?agonist|esordient|pulcin|primi calci|piccoli amici|scuola calcio/.test(n)) return true;
+  const u = n.match(/\bu(\d{1,2})\b/);
+  if (u) return Number(u[1]) <= 13;
+  const y = n.match(/\b(20\d{2})\b/);
+  if (y) {
+    const t = today0();
+    const season = t.getMonth() >= 6 ? t.getFullYear() : t.getFullYear() - 1;
+    return Number(y[1]) >= season - 12;
+  }
+  return false;
+}
+
 const CAT_STOP = new Set(['categoria','categorie','squadra','prima','seconda','terza','gruppo','team','under','anni','annata','classe','leva','nati']);
 
 function buildIndex() {
@@ -536,8 +557,8 @@ function describe(f) {
   if (f.opps.length) p.push('contro ' + joinIt(f.opps));
   if (f.home === true) p.push('in casa');
   if (f.home === false) p.push('in trasferta');
-  if (f.notif === false) p.push('non ancora notificate');
-  if (f.notif === true) p.push('già notificate');
+  if (f.notif === false) p.push('di pre-agonistica non ancora notificate');
+  if (f.notif === true) p.push('di pre-agonistica già notificate');
   if (f.win) p.push(f.win.label);
   return p.join(' ');
 }
@@ -555,13 +576,18 @@ function sentence(m, f) {
 }
 
 function answer(f) {
+  // Partite da notificare: di default solo le prossime due settimane, non tutto il calendario
+  if (f.notif !== null && !f.win && f.mode !== 'last') {
+    const t = today0();
+    f.win = { from: iso(t), to: iso(addDays(t, 13)), label: 'nelle prossime due settimane' };
+  }
   const r = run(f);
   const list = r.list, played = r.played;
   const d = describe(f);
   const pl = played.length;
   const out = text => ({ text: text, list: list, played: played });
 
-  if (!list.length) {
+  if (!list.length && f.notif === null) {
     if (f.mode === 'last') return out('Non risultano partite già giocate' + (d ? ' ' + d : '') + '.');
     let t = 'Non risultano partite' + (f.win ? ' ancora da giocare' : ' in programma') + (d ? ' ' + d : '') + '.';
     if (pl === 1) t += ' Ne risulta una già giocata, ' + dayText(played[0].d) + '.';
@@ -571,6 +597,14 @@ function answer(f) {
   const n = list.length;
   const det = list.slice(0, 3).map(m => sentence(m, f)).join(' ');
   const rest = n === 4 ? ' L\'altra è nell\'elenco qui sotto.' : n > 4 ? ' Le altre ' + (n - 3) + ' sono nell\'elenco qui sotto.' : '';
+  // Notifiche (pre-agonistica): risposta dedicata, senza partite giocate
+  if (f.notif !== null) {
+    const base = describe(Object.assign({}, f, { notif: null, win: null }));
+    const where = (base ? ' ' + base : '') + (f.win ? ' ' + f.win.label : '');
+    if (!n) return { text: 'Nessuna partita di pre-agonistica ' + (f.notif === false ? 'da notificare' : 'già notificata') + where + '.', list: [], played: [] };
+    const what = f.notif === false ? 'da notificare' : (n === 1 ? 'già notificata' : 'già notificate');
+    return { text: (n === 1 ? 'C\'è una partita di pre-agonistica ' + what + where + ': ' : 'Ci sono ' + n + ' partite di pre-agonistica ' + what + where + '. ') + (n === 1 ? det.charAt(0).toLowerCase() + det.slice(1) : det) + rest, list: list, played: [] };
+  }
   const note = !pl ? '' : (pl === 1 ? ' Segnalo anche una partita già giocata' : ' Segnalo anche ' + pl + ' partite già giocate') + (f.win ? ' in questo periodo' : '') + '.';
 
   if (f.count) {
@@ -1107,7 +1141,11 @@ async function connect(c, refresh, greet, remember) {
     code = c;
     if (remember !== undefined) saveCode(c, remember);
     $('gate').hidden = true;
-    matches = res.matches || [];
+    matches = (res.matches || []).map(m => {
+      m.pre = isPre(m.cat);
+      if (!m.pre) m.notif = null; // le notifiche valgono solo per la pre-agonistica
+      return m;
+    });
     contacts = (res.contacts || [])
       .map(c => ({ team: c.team, fields: c.fields.filter(fl => !isIdField(fl)) }))
       .filter(c => c.fields.length);
