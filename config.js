@@ -4,7 +4,7 @@
 window.RONDA_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxuvzYDkP5zd9fpWjHXaRouZCtSUbTeolR8oxQkscsTPlX973_LbvU7sWsP5sgfz0S-/exec';
 
 // Build mostrata in basso a sinistra: aggiornala a ogni rilascio (es. data + progressivo)
-window.RONDA_BUILD = '2026.10.01-2';
+window.RONDA_BUILD = '2026.10.01-3';
  
 // Sinonimi delle categorie: nome come scritto nel Gestionale → modi in cui può essere chiesto.
 // "voce" è come RONDA pronuncia la categoria. Per aggiungerne una, copia una riga e adattala.
