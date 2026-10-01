@@ -14,8 +14,8 @@
 :root{
   --abyss:#06121F; --hull:#0B2033; --holo:#6FE3FF; --ember:#FFB547; --signal:#FF6B7D;
   --text:#D8F6FF; --muted:#86AEC4; --line:rgba(111,227,255,.24); --grid:rgba(111,227,255,.045);
-  --core:#FF9A3C; --core-think:#FFD27A; /* nucleo e rete neurale */
-  --state:var(--core);
+  --core:#FF9A3C; --core-think:#FFD27A; /* arancione: nucleo in elaborazione e rete neurale */
+  --state:var(--holo);
   --display:"Chakra Petch","Segoe UI",system-ui,sans-serif;
   --body:Barlow,"Segoe UI",system-ui,sans-serif;
   box-sizing:border-box;
@@ -27,13 +27,14 @@ html,body{height:100%;margin:0}
 body{
   background-color:var(--abyss);color:var(--text);font:16px/1.5 var(--body);
   background-image:
-    radial-gradient(ellipse 70% 50% at 50% 32%,rgba(255,140,50,.13),transparent 70%),
+    radial-gradient(ellipse 70% 50% at 50% 32%,rgba(43,168,214,.18),transparent 70%),
     linear-gradient(var(--grid) 1px,transparent 1px),
     linear-gradient(90deg,var(--grid) 1px,transparent 1px);
   background-size:100% 100%,28px 28px,28px 28px;
   -webkit-tap-highlight-color:transparent;
 }
-body[data-state="thinking"]{--state:var(--core-think)}
+body[data-state="thinking"]{--state:var(--core)}
+body[data-state="thinking"]{background-image:radial-gradient(ellipse 70% 50% at 50% 32%,rgba(255,140,50,.14),transparent 70%),linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px)}
 body[data-state="error"]{--state:var(--signal)}
 button,input{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--holo);outline-offset:3px}
