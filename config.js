@@ -17,6 +17,6 @@ window.RONDA_ALIASES = {
   'U15 - 2012': { voce: 'under 15',      alias: ['U15', 'under 15', '2012', 'giovanissimi A'] },
   'U14 - 2013': { voce: 'under 14',      alias: ['U14', 'under 14', '2013', 'Giovanissimi B'] },
   'U13 - 2014': { voce: 'under 13',      alias: ['U13', 'under 13', '2014', 'Esordienti A'] },
-  'U13 - 2014': { voce: 'under 12',      alias: ['U12', 'under 12', '2015', 'Esordienti B'] }
+  'U12 - 2015': { voce: 'under 12',      alias: ['U12', 'under 12', '2015', 'Esordienti B'] }
  };
  
